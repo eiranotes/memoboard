@@ -5,6 +5,24 @@
 
 > 현재 패키지는 Windows/Tauri 데스크톱 실행을 기준으로 구성되어 있습니다.
 
+- Latest release: https://github.com/eiranotes/memoboard/releases/latest
+
+
+
+## 스크린샷
+
+| 메모보드 | Markdown 에디터 |
+|---|---|
+| ![메모보드 구역 화면](assets/screenshots/board-overview.png) | ![Markdown 분할 편집 화면](assets/screenshots/markdown-editor.png) |
+
+| 주간 달력 | 오늘 패널 / 검색 |
+|---|---|
+| ![주간 달력 화면](assets/screenshots/calendar-week.png) | ![오늘 패널과 검색 화면](assets/screenshots/today-panel.png) |
+
+| 검색 필터 | 설정 / 백업 / 공유 작업함 |
+|---|---|
+| ![검색 필터 화면](assets/screenshots/search-filter.png) | ![설정과 공유 작업함 화면](assets/screenshots/settings.png) |
+
 ## 주요 특징
 
 - **구역형 메모보드**: 업무, 개인, 아이디어처럼 여러 구역을 만들고 메모를 드래그해서 정리할 수 있습니다.
@@ -46,6 +64,8 @@ Memoboard는 크게 네 영역으로 구성됩니다.
 
 ```text
 .
+├─ assets/
+│  └─ screenshots/
 ├─ src/
 │  ├─ index.html
 │  ├─ css/app.css
@@ -164,27 +184,6 @@ build-tauri-no-install.bat
 `build-tauri-no-install.bat`도 빌드 성공 시 같은 위치에 실행파일을 복사합니다.
 
 
-## 빌드 오류 메모
-
-Tauri 2의 기본 feature에는 asset `compression`이 포함됩니다. 이 기능은 Rust `brotli` crate를 끌고 오는데, 일부 fresh Windows 빌드에서 `brotli 8.0.3`과 `alloc-no-stdlib` 2.x/3.x가 함께 잡히며 `StandardAlloc: Allocator<u8>` 오류가 날 수 있습니다.
-
-이 프로젝트는 앱 자산이 작고 별도 압축 이점이 크지 않으므로, `src-tauri/Cargo.toml`에서 Tauri 기본 feature를 끄고 필요한 기능만 명시했습니다. 핵심은 `compression`을 사용하지 않는 것입니다.
-
-```toml
-tauri-build = { version = "2", default-features = false }
-tauri = { version = "2", default-features = false, features = ["wry", "custom-protocol", "tray-icon", "image-png", "image-ico", "common-controls-v6", "dynamic-acl"] }
-```
-
-기존 실패 폴더에서 계속 빌드하는 경우에는 캐시를 정리하세요.
-
-```powershell
-Remove-Item -Recurse -Force .\src-tauri\target -ErrorAction SilentlyContinue
-Remove-Item .\src-tauri\Cargo.lock -Force -ErrorAction SilentlyContinue
-npm run build
-```
-
-정상 상태라면 새 빌드 로그에 `Compiling brotli v8.0.3`가 나오지 않아야 합니다.
-
 ## 데이터 저장 방식
 
 ### 개인 작업함
@@ -246,7 +245,7 @@ _기울임_
 이 저장소를 그대로 공개하기 전에 아래를 확인하세요.
 
 - 라이선스: MIT License
-- 스크린샷 추가: README 상단이나 `screenshots/` 폴더에 실제 화면 이미지 추가 권장
+- 스크린샷: `assets/screenshots/` 폴더에 README 표시용 화면 이미지 포함
 - `src-tauri/tauri.conf.json`의 `identifier`를 본인 도메인/브랜드에 맞게 변경 권장
 - 배포용 release를 만들 경우 `bundle.active` 설정 검토 필요
 - `Cargo.lock`, `package-lock.json`은 실제 설치/빌드 환경에서 생성 후 커밋하는 것을 권장

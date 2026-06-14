@@ -9,7 +9,7 @@ edition = "2021"
 
 [build-dependencies]
 # Disable default codegen compression so the build does not pull the Rust `brotli` crate.
-tauri-build = { version = "2", default-features = false }
+tauri-build = { version = "2", default-features = false , features = [] }
 
 [dependencies]
 # Keep Tauri default features off to avoid the default `compression` feature.
