@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>메모보드</title>
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+<div id="app">
+  <header data-tauri-drag-region>
+    <button class="iconbtn" id="menuBtn" title="사이드바">☰</button>
+    <div class="logo"><span class="appmark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="16" rx="3" fill="#fff" stroke="#0E7C6B" stroke-width="1.7"/><path d="M8 9h8M8 13h6M8 17h4" stroke="#0E7C6B" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 4.8h9" stroke="#FFE872" stroke-width="3.2" stroke-linecap="round"/></svg></span><i>메모보드</i></div>
+    <nav class="tabs" id="viewTabs">
+      <button data-view="memo" class="on">메모</button>
+      <button data-view="cal">달력</button>
+      <button data-view="settings">설정</button>
+    </nav>
+    <div class="workspace-switch" id="workspaceSwitch" title="개인/공유 작업함 전환">
+      <button data-workspace="personal" class="on">개인</button>
+      <button data-workspace="shared">공유</button>
+    </div>
+    <div class="searchwrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" placeholder="검색: tag:업무 folder:프로젝트 due:week is:done, 초성 가능" autocomplete="off">
+      <span class="kbd-hint">Ctrl K</span>
+    </div>
+    <div class="hspace"></div>
+    <button class="iconbtn desktop-only" id="topBtn" title="항상 최상단">📍</button>
+    <button class="iconbtn" id="themeBtn" title="다크/라이트">◐</button>
+    <button class="iconbtn" id="moreBtn" title="더보기">⋯</button>
+    <button class="primary" id="newBtn">＋ 새 메모</button>
+    <div class="win-controls" id="winControls" aria-label="창 제어">
+      <button class="winbtn" id="winMin" title="최소화" aria-label="최소화">—</button>
+      <button class="winbtn" id="winMax" title="최대화/복원" aria-label="최대화/복원">□</button>
+      <button class="winbtn close" id="winClose" title="닫기" aria-label="닫기">✕</button>
+    </div>
+    <div class="dd" id="moreMenu">
+      <button data-act="export">⤓&nbsp; JSON 내보내기 (백업)</button>
+      <button data-act="import">⤒&nbsp; JSON 가져오기</button>
+      <button data-act="md-export-folder">🗂&nbsp; Markdown 폴더 내보내기</button>
+      <button data-act="md-import-folder">🗃&nbsp; Markdown 폴더 가져오기</button>
+      <div class="sep desktop-only-block"></div>
+      <button class="desktop-only-block" data-act="always-on-top">📍&nbsp; 항상 최상단 켜기/끄기</button>
+      <button class="desktop-only-block" data-act="mini-mode">🪟&nbsp; 미니 플로팅 모드</button>
+      <button class="desktop-only-block" data-act="hide-to-tray">🗕&nbsp; 트레이로 숨기기</button>
+      <button class="desktop-only-block" data-act="minimize-to-tray">🔒&nbsp; 닫기 버튼은 트레이로 숨김</button>
+      <button class="desktop-only-block" data-act="quick-note">⚡&nbsp; 빠른 메모 (Ctrl+Shift+M)</button>
+      <div class="range-line desktop-only-block" data-no-close="1"><span>투명도</span><input type="range" id="opacityRange" min="55" max="100" step="5" value="100"><b id="opacityVal">100%</b></div>
+      <div class="sep"></div>
+      <button data-act="restore-center">🧯&nbsp; 백업 복구 센터</button>
+      <button data-act="template-manager">📄&nbsp; 템플릿 관리자</button>
+      <div class="sep"></div>
+      <button data-act="autobackup-setup">💾&nbsp; 자동 백업 폴더 지정</button>
+      <button data-act="autobackup-run">↻&nbsp; 자동 백업 지금 실행</button>
+      <button data-act="autobackup-snapshot">🧷&nbsp; 자동 백업 스냅샷 켜기/끄기</button>
+      <button data-act="autobackup-off">⏸&nbsp; 자동 백업 해제</button>
+      <div class="sep"></div>
+      <button data-act="bulk-size" data-size="small">↕&nbsp; 전체 작게 보기</button>
+      <button data-act="bulk-size" data-size="large">↕&nbsp; 전체 크게 보기</button>
+      <div class="sep"></div>
+      <button data-act="trash">🗑&nbsp; 휴지통</button>
+      <button data-act="notif">🔔&nbsp; 알림 권한 요청</button>
+      <button data-act="help">⌨&nbsp; 단축키 도움말</button>
+      <div class="sep"></div>
+      <div class="note-line" id="storageInfo"></div>
+    </div>
+  </header>
+
+  <aside id="side">
+    <div class="sec" data-sec="work">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">빠른 보기</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body" id="workList"></div>
+    </div>
+    <div class="sec" data-sec="zone">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">보드</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body" id="zoneList"></div>
+    </div>
+    <div class="sec" data-sec="due">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">기한</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body" id="dueList"></div>
+    </div>
+    <div class="sec" data-sec="kind">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">유형</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body" id="kindList"></div>
+    </div>
+    <div class="sec" data-sec="smart">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">분류</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body" id="smartList"></div>
+    </div>
+    <div class="sec" id="folderSec" data-sec="folder">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">폴더</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body" id="folderList"></div>
+    </div>
+    <div class="sec" data-sec="tag">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">태그</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body tagcloud" id="tagList"></div>
+    </div>
+    <div class="sec" data-sec="color">
+      <h3 class="sec-title" data-sec-toggle><span class="sec-drag" title="카테고리 순서 변경">☰</span><span class="sec-name">색상</span><span class="sec-toggle">▾</span></h3>
+      <div class="sec-body colorrow" id="colorFilter"></div>
+    </div>
+  </aside>
+
+  <main id="main"></main>
+</div>
+
+<!-- editor -->
+<div class="ovl" id="edWrap">
+  <div class="ed" id="edBox">
+    <div class="edhead">
+      <div class="colorrow" id="edColors"></div>
+      <div class="hspace"></div>
+      <button class="iconbtn" id="edPin" title="고정 (항상 위에 표시)">📌</button>
+      <button class="iconbtn" id="edLock" title="잠금/해제">🔓</button>
+      <button class="iconbtn" id="edArchive" title="보관/해제">📦</button>
+      <button class="iconbtn" id="edHist" title="버전 기록">🕘</button>
+      <button class="edaction" id="edWide" title="장문 편집 영역 확대">넓게</button>
+      <button class="iconbtn" id="edMore" title="내보내기">⤓</button>
+      <button class="iconbtn" id="edDel" title="휴지통으로">🗑</button>
+      <button class="edaction" id="edSaveBtn" title="저장 (Ctrl+S)">저장</button>
+      <button class="edaction primary-save" id="edDoneBtn" title="저장 후 닫기">완료</button>
+      <button class="iconbtn" id="edClose" title="저장 후 닫기 (Esc)">✕</button>
+      <div class="dd" id="edMoreMenu" style="top:42px;right:48px">
+        <button data-act="md">.md 파일로 저장</button>
+        <button data-act="copymd">마크다운 복사</button>
+        <button data-act="copyhtml">HTML 복사</button>
+      </div>
+    </div>
+    <input id="edTitle" placeholder="제목" autocomplete="off">
+    <div class="edmeta">
+      <label title="완료 여부">✅ <input type="checkbox" id="edDone"> 완료</label>
+      <label title="중요도">중요도 <select id="edPriority"><option value="normal">보통</option><option value="low">낮음</option><option value="high">높음</option><option value="critical">긴급</option></select></label>
+      <label title="달력 표시 유형">아이콘 <select id="edKind"><option value="memo">📝 메모</option><option value="task">✅ 업무</option><option value="meeting">💬 회의</option><option value="appointment">🤝 약속</option><option value="call">📞 전화</option><option value="deadline">📌 마감</option><option value="report">🧾 보고</option></select></label>
+      <label title="달력에 표시할 날짜">📅 <input type="date" id="edDate"></label>
+      <label title="업무 마감일 / D-day 기준">⏳ <input type="date" id="edDue"></label>
+      <label title="브라우저 알림 (탭이 열려있을 때 동작)">⏰ <input type="datetime-local" id="edRemind"></label>
+      <label title="폴더">📁 <input id="edFolder" placeholder="폴더" list="folderDl" size="8"><datalist id="folderDl"></datalist></label>
+      <label title="태그 (쉼표 구분)">🏷 <input id="edTags" placeholder="태그, 태그" size="12"></label>
+      <label class="shared-only" title="공유 메모 상태">공유상태 <select id="edSharedStatus"><option value="open">📥 요청</option><option value="doing">🛠 진행</option><option value="hold">⏸ 보류</option><option value="done">✅ 완료</option></select></label>
+      <label class="shared-only" title="공유 메모 담당자">담당 <input id="edSharedAssignee" placeholder="이름" size="8"></label>
+      <label title="템플릿 삽입">📄 <select id="edTpl">
+        <option value="">템플릿</option><option value="meeting">회의록</option>
+        <option value="daily">일일 메모</option><option value="sql">SQL 스니펫</option>
+        <option value="weekly">주간 리뷰</option>
+      </select></label>
+      <div class="modetabs" id="edModes">
+        <button data-m="prev" class="on">보기</button>
+        <button data-m="edit">편집</button>
+        <button data-m="split">분할</button>
+      </div>
+    </div>
+    <div class="edbody">
+      <textarea id="edText" placeholder="내용을 입력하세요. 마크다운 지원: **굵게**, - [ ] 체크리스트, [[위키링크]], #태그, ```sql 코드```, | 표 |"></textarea>
+      <div id="edPrev" class="prose"></div>
+    </div>
+    <div class="edfoot">
+      <span id="edSaved"></span>
+      <div class="backlinks" id="edBacklinks"></div>
+      <div class="hspace"></div>
+      <span id="edCount"></span>
+    </div>
+  </div>
+</div>
+
+<!-- command palette -->
+<div class="ovl" id="palWrap" style="align-items:flex-start">
+  <div class="palbox">
+    <input id="palInput" placeholder="메모 검색 또는 명령 실행…" autocomplete="off">
+    <div id="palList"></div>
+  </div>
+</div>
+
+<!-- shortcuts -->
+<div class="ovl" id="helpWrap">
+  <div class="dlg">
+    <div class="dlghead">단축키 <button class="iconbtn" data-close>✕</button></div>
+    <div class="dlgbody" id="helpBody"></div>
+  </div>
+</div>
+
+<!-- history -->
+<div class="ovl" id="histWrap">
+  <div class="dlg">
+    <div class="dlghead">버전 기록 (최근 10개) <button class="iconbtn" data-close>✕</button></div>
+    <div class="dlgbody" id="histBody"></div>
+  </div>
+</div>
+
+
+<!-- quick note -->
+<div class="ovl" id="quickWrap">
+  <div class="quickbox">
+    <div class="quickhead">⚡ 빠른 메모 <button class="iconbtn" id="quickClose">✕</button></div>
+    <div class="quickbody">
+      <input id="quickTitle" placeholder="제목">
+      <textarea id="quickBody" placeholder="내용을 빠르게 적고 Ctrl+Enter로 저장"></textarea>
+    </div>
+    <div class="quickfoot"><button class="softbtn" id="quickCancel">취소</button><button class="primary" id="quickSave">저장</button></div>
+  </div>
+</div>
+
+<!-- restore center -->
+<div class="ovl" id="restoreWrap">
+  <div class="dlg">
+    <div class="dlghead">백업 복구 센터 <button class="iconbtn" data-close>✕</button></div>
+    <div class="dlgbody" id="restoreBody"></div>
+  </div>
+</div>
+
+<!-- template manager -->
+<div class="ovl" id="tplWrap">
+  <div class="dlg">
+    <div class="dlghead">템플릿 관리자 <button class="iconbtn" data-close>✕</button></div>
+    <div class="dlgbody" id="tplBody"></div>
+  </div>
+</div>
+
+
+<!-- design-token confirm dialog -->
+<div class="ovl" id="confirmWrap">
+  <div class="mbconfirm">
+    <div class="mbconfirm-head"><span id="confirmIcon">⚠️</span><span id="confirmTitle">확인</span></div>
+    <div class="mbconfirm-body" id="confirmMsg"></div>
+    <div class="mbconfirm-foot"><button class="softbtn" id="confirmCancel">취소</button><button class="dangerbtn" id="confirmOk">확인</button></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<input type="file" id="impFile" accept=".json" style="display:none">
+<script src="./js/00-tauri-native.js"></script>
+<script src="./js/01-storage.js"></script>
+<script src="./js/02-store-services.js"></script>
+<script src="./js/03-backup.js"></script>
+<script src="./js/04-utils-markdown.js"></script>
+<script src="./js/05-render-panels.js"></script>
+<script src="./js/06-calendar.js"></script>
+<script src="./js/07-editor-trash.js"></script>
+<script src="./js/08-drag-service.js"></script>
+<script src="./js/09-main-sidebar-events.js"></script>
+<script src="./js/10-header-io-notification.js"></script>
+<script src="./js/11-commands-help-keys.js"></script>
+<script src="./js/13-shared-board.js"></script>
+<script src="./js/12-init.js"></script>
+</body>
+</html>

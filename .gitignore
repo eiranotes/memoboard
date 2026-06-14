@@ -1,0 +1,55 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.tmp
+
+# Tauri / Rust build outputs
+src-tauri/target/
+target/
+src-tauri/gen/
+
+# App build outputs
+dist/
+build/
+release/
+*.msi
+*.exe
+*.app
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+
+# Local data / backups / user exports
+*.sqlite
+*.db
+*.db-shm
+*.db-wal
+*.bak
+*.backup
+*.tmp
+*.log
+exports/
+backups/
+shared-workspace/
+memoboard-data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
