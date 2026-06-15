@@ -26,8 +26,10 @@ $('#main').addEventListener('click',e=>{
   if(addZone){e.preventDefault();e.stopPropagation();addMemoZone();return;}
   const delZone=e.target.closest('[data-zone-del]');
   if(delZone){e.preventDefault();e.stopPropagation();deleteMemoZone(+delZone.dataset.zoneDel);return;}
+  const moveZone=e.target.closest('[data-zone-move]');
+  if(moveZone&&!moveZone.disabled){e.preventDefault();e.stopPropagation();moveMemoZone(+moveZone.dataset.zoneMove,+moveZone.dataset.zoneTo);return;}
   const fold=e.target.closest('[data-zone-fold]');
-  if(fold){e.preventDefault();e.stopPropagation();ensureZones();const z=+fold.dataset.zoneFold;if(window.MBStore&&StoreService.toggleZoneCollapsed)StoreService.toggleZoneCollapsed(z);else meta.collapsedZones[z]=!meta.collapsedZones[z];metaSave();render();return;}
+  if(fold){e.preventDefault();e.stopPropagation();ensureZones();const z=+fold.dataset.zoneFold;if(window.MBStore&&StoreService.toggleZoneCollapsed)StoreService.toggleZoneCollapsed(z);else meta.collapsedZones[z]=!meta.collapsedZones[z];if(typeof saveZonesAndPublishManifest==='function')saveZonesAndPublishManifest({silent:true});else metaSave();render();return;}
   const cb=e.target.closest('input[data-task]');
   if(cb){e.stopPropagation();
     const card=cb.closest('.card[data-id]');
@@ -62,6 +64,10 @@ $('#main').addEventListener('click',e=>{
         if(b){setNoteSize(n,b.dataset.size);}closeSizepop();ev.stopPropagation();});}
     if(act.dataset.a==='del'){
       if(n.locked){toast('잠금 메모입니다. 먼저 잠금을 해제하세요');return;}
+      if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&n._sharedLockOwner&&(!SharedBoard.hasEditLock||!SharedBoard.hasEditLock(n.id))){
+        toast('다른 사용자가 편집 중이라 삭제할 수 없습니다: '+n._sharedLockOwner);
+        return;
+      }
       n.deletedAt=Date.now();touch(n);
       toast('휴지통으로 이동했습니다',()=>{n.deletedAt=null;touch(n);});}
     if(act.dataset.a==='color'){closeCpop();closeSizepop();
@@ -84,7 +90,7 @@ document.addEventListener('click',e=>{if(cpopEl&&!e.target.closest('.cpop'))clos
   if(!e.target.closest('#edMore'))$('#edMoreMenu').classList.remove('open');});
 $('#main').addEventListener('input',e=>{
   const inp=e.target.closest('input[data-zone-name]');if(!inp)return;
-  ensureZones();const zi=clampZone(inp.dataset.zoneName);const name=inp.value.trim()||('구역 '+(zi+1));if(window.MBStore&&StoreService.setZoneName)StoreService.setZoneName(zi,name);else meta.memoZones[zi]=name;metaSave();
+  ensureZones();const zi=clampZone(inp.dataset.zoneName);const name=inp.value.trim()||('구역 '+(zi+1));if(window.MBStore&&StoreService.setZoneName)StoreService.setZoneName(zi,name);else meta.memoZones[zi]=name;if(typeof saveZonesAndPublishManifest==='function')saveZonesAndPublishManifest({silent:true});else metaSave();
 });
 $('#main').addEventListener('keydown',e=>{
   const inp=e.target.closest&&e.target.closest('input[data-zone-name]');

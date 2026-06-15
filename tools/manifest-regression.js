@@ -136,6 +136,10 @@ context.window.SharedBoard = null;
 context.global = context;
 vm.createContext(context);
 const sharedSrc = fs.readFileSync(path.join(root, 'src/js/13-shared-board.js'), 'utf8');
+const storeSrc = fs.readFileSync(path.join(root, 'src/js/02-store-services.js'), 'utf8');
+const editorSrc = fs.readFileSync(path.join(root, 'src/js/07-editor-trash.js'), 'utf8');
+if (!/reorderZone/.test(storeSrc)) fail('StoreService.reorderZone missing');
+if (!/saveZonesAndPublishManifest/.test(sharedSrc) || !/saveZonesAndPublishManifest/.test(editorSrc)) fail('zone save/publish helper missing');
 vm.runInContext(sharedSrc, context, {filename:'13-shared-board.js'});
 (async()=>{
   await context.window.SharedBoard.init();

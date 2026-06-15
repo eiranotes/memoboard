@@ -15,7 +15,7 @@ $('#viewTabs').addEventListener('dragover',e=>{
   clearTimeout(viewDragSwitchTimer);
   viewDragSwitchTimer=setTimeout(()=>{if((window.MBStore&&StoreService.view?StoreService.view():meta.view)!==b.dataset.view)setView(b.dataset.view);},240);
 });
-function setView(v){const next=(v==='cal'||v==='settings')?v:'memo';if(window.MBStore&&StoreService.setView)StoreService.setView(next);else meta.view=next;if(filter.smart==='trash')filter.smart='all';metaSave();render();}
+function setView(v){const next=(v==='cal'||v==='settings'||v==='guide')?v:'memo';if(window.MBStore&&StoreService.setView)StoreService.setView(next);else meta.view=next;if(filter.smart==='trash')filter.smart='all';metaSave();render();}
 function memoTopOrder(zone){const arr=liveNotes().map(normalizeNote).filter(n=>zone==null||n.zone===zone);return arr.length?Math.min(...arr.map(n=>n.morder||0))-1024:Date.now();}
 function quickNew(p){if(typeof workspaceWritable==='function'&&!workspaceWritable())return;const z=(p&&typeof p.zone==='number')?clampZone(p.zone):0;const n=newNote(Object.assign({size:(window.MBStore&&StoreService.defaultSize?StoreService.defaultSize():(meta.defaultSize||'title')),zone:z,morder:memoTopOrder(z)},p||{}));notes.push(n);persistNote(n,{skipRender:true}).then(()=>openEditor(n.id,'edit'));}
 $('#moreBtn').onclick=e=>{e.stopPropagation();$('#moreMenu').classList.toggle('open');};

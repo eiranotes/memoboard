@@ -140,7 +140,8 @@ const SharedBoard=(()=>{
         if((window.MBStore&&StoreService.view?StoreService.view():meta.view)==='settings')render();
         return true;
       }
-    }catch(e){console.warn('[memoboard] shared manifest save failed',e);}
+      state.error=(res&&res.error)||'Shared manifest save failed';
+    }catch(e){state.error=String(e&&e.message||e);console.warn('[memoboard] shared manifest save failed',e);}
     if(!silent)toast('공유 매니페스트 저장 실패');
     return false;
   }
@@ -185,12 +186,27 @@ const SharedBoard=(()=>{
     if(!native()){toast('공유 작업함은 Tauri 데스크톱 앱에서만 지원합니다');return false;}
     if(!(await requireIdentity()))return false;
     const name=author();
-    const res=await native().pickSharedDir({displayName:name});
-    if(!res||!res.ok)return false;
+    let res=null;
+    try{
+      res=await native().pickSharedDir({displayName:name});
+    }catch(e){
+      const msg=String((e&&e.message)||e||'');
+      console.warn('[memoboard] shared folder pick failed',e);
+      if(/denied|permission|access/i.test(msg))toast('공유폴더 권한이 없어 연결하지 못했습니다.');
+      else if(/read.?only|readonly|쓰기|write/i.test(msg))toast('공유폴더가 읽기 전용이거나 manifest를 만들 수 없습니다.');
+      else toast('공유폴더 선택 또는 초기화에 실패했습니다.');
+      return false;
+    }
+    if(!res||!res.ok){
+      if(!(res&&res.canceled))toast('공유폴더를 선택하지 못했습니다. 권한 또는 읽기 전용 상태를 확인하세요.');
+      return false;
+    }
     applyConfig(res.config);
-    await refresh(true);
-    if(!hasManifestZones(state.manifest))await publishManifest(true);
-    else applyManifest(state.manifest,{toast:false});
+    await refresh(true,{force:true});
+    if(!hasManifestZones(state.manifest)){
+      const published=await publishManifest(true);
+      if(!published){toast('공유폴더 manifest 생성/저장에 실패했습니다. 폴더 권한을 확인하세요.');return false;}
+    }else applyManifest(state.manifest,{toast:false});
     await inspect(true);
     toast('공유폴더를 연결했습니다');
     return true;
@@ -288,7 +304,10 @@ const SharedBoard=(()=>{
     if(!hasIdentity()){await requireIdentity();return false;}
     const old=state.notes.find(x=>String(x.id)===String(id));
     try{
-      const res=await native().sharedDeleteNote({id,expectedUpdatedAt:Number(old&&old.updatedAt)||0,expectedMtime:Number(old&&old._sharedMtime)||0,author:author()});
+      const request={id,expectedUpdatedAt:Number(old&&old.updatedAt)||0,expectedMtime:Number(old&&old._sharedMtime)||0,author:author()};
+      if(state.editId===id&&state.editToken)request.lockToken=state.editToken;
+      const res=await native().sharedDeleteNote(request);
+      if(res&&res.locked){toast('다른 사용자가 편집 중이라 삭제할 수 없습니다: '+(res.owner||(res.lock&&res.lock.owner)||'알 수 없음'));await refresh(true);return false;}
       if(res&&res.conflict){toast('공유 메모 삭제 충돌: 새로고침합니다');await refresh(true);return false;}
       if(res&&res.ok&&res.note)replaceSavedNote(res.note,res.mtime);
       else await refresh(true);
@@ -390,6 +409,47 @@ const SharedBoard=(()=>{
   return {state,STATUS_META,init,isActive,author,displayName:explicitDisplayName,chooseFolder,saveName,refresh,inspect,publishManifest,applyManifest,currentNotes,getNote,putNote,putNotes,deleteNote,acquireLock,releaseLock,hasEditLock,switchWorkspace,updateWorkspaceSwitch,setupHtml,bannerHtml,statusLabel,ensureWritable,compact};
 })();
 window.SharedBoard=SharedBoard;
+
+let zoneManifestPublishTimer=null;
+function notifySharedManifestPublishFailure(){
+  const msg='공유 구역 manifest 자동 저장에 실패했습니다. 공유폴더 권한과 읽기 전용 상태를 확인하세요.';
+  try{toast(msg);}catch(e){console.warn('[memoboard] shared manifest publish failure:',msg);}
+}
+function scheduleSharedManifestPublish(delay){
+  if(!(window.SharedBoard&&typeof SharedBoard.isActive==='function'&&SharedBoard.isActive()))return;
+  if(!(SharedBoard.state&&SharedBoard.state.configured&&SharedBoard.publishManifest))return;
+  clearTimeout(zoneManifestPublishTimer);
+  zoneManifestPublishTimer=setTimeout(async()=>{
+    try{
+      const ok=await SharedBoard.publishManifest(true);
+      if(!ok)notifySharedManifestPublishFailure();
+    }catch(e){
+      console.warn('[memoboard] shared manifest debounce publish failed',e);
+      notifySharedManifestPublishFailure();
+    }
+  },Number.isFinite(Number(delay))?Number(delay):450);
+}
+function saveZonesAndPublishManifest(opts){
+  opts=opts||{};
+  const saveOpts=opts.saveOptions||{silent:!!opts.silent};
+  const done=Promise.resolve()
+    .then(()=>metaSave(saveOpts))
+    .then(ok=>{
+      if(!ok){
+        try{toast('구역 설정 저장에 실패했습니다. 저장소 권한을 확인하세요.');}catch(_){}
+        return false;
+      }
+      scheduleSharedManifestPublish(opts.debounceMs);
+      return ok;
+    })
+    .catch(e=>{
+      console.warn('[memoboard] zone metadata save failed',e);
+      try{toast('구역 설정 저장에 실패했습니다. 저장소 권한을 확인하세요.');}catch(_){}
+      return false;
+    });
+  return done;
+}
+window.saveZonesAndPublishManifest=saveZonesAndPublishManifest;
 function workspaceBannerHtml(){return window.SharedBoard?SharedBoard.bannerHtml():'';}
 function updateWorkspaceSwitch(){if(window.SharedBoard)SharedBoard.updateWorkspaceSwitch();}
 

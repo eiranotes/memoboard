@@ -430,7 +430,7 @@ $('#edPin').onclick=()=>{const n=curNote();n.pinned=!n.pinned;touch(n,true);
   $('#edPin').style.color=n.pinned?'var(--accent-ink)':'';toast(n.pinned?'고정했습니다':'고정 해제');};
 $('#edLock').onclick=()=>{const n=curNote();n.locked=!n.locked;touch(n,true);$('#edLock').classList.toggle('on',!!n.locked);$('#edLock').textContent=n.locked?'🔒':'🔓';toast(n.locked?'메모를 잠갔습니다':'메모 잠금을 해제했습니다');};
 $('#edArchive').onclick=()=>{const n=curNote();n.archived=!n.archived;touch(n,true);$('#edArchive').classList.toggle('on',!!n.archived);toast(n.archived?'보관함으로 이동했습니다':'보관을 해제했습니다');};
-$('#edDel').onclick=()=>{const n=curNote();if(n.locked){toast('잠금 메모입니다. 먼저 잠금을 해제하세요');return;}n.deletedAt=Date.now();touch(n,true).then(()=>{editing=null;$('#edWrap').classList.remove('open');render();});
+$('#edDel').onclick=()=>{const n=curNote();if(n.locked){toast('잠금 메모입니다. 먼저 잠금을 해제하세요');return;}if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&n._sharedLockOwner&&(!SharedBoard.hasEditLock||!SharedBoard.hasEditLock(n.id))){toast('다른 사용자가 편집 중이라 삭제할 수 없습니다: '+n._sharedLockOwner);return;}n.deletedAt=Date.now();touch(n,true).then(()=>{editing=null;$('#edWrap').classList.remove('open');render();});
   toast('휴지통으로 이동했습니다',()=>{n.deletedAt=null;touch(n);});};
 $('#edWide').onclick=()=>{const wide=window.MBStore&&StoreService.toggleEditorWide?StoreService.toggleEditorWide():!(meta.editorWide);if(!(window.MBStore&&StoreService.toggleEditorWide))meta.editorWide=wide;metaSave({silent:true});$('#edBox').classList.toggle('wide',!!wide);$('#edWide').classList.toggle('on',!!wide);toast(wide?'장문 편집 영역을 넓혔습니다':'기본 편집 크기로 돌아왔습니다');};
 $('#edCancelBtn').onclick=()=>cancelEditor();
@@ -490,12 +490,62 @@ async function bulkSetSize(size){
   await metaSave({silent:true});
   if(ok){render();toast('전체 메모를 '+SIZE_LABEL[size]+' 보기로 바꿨습니다');}
 }
+function zoneSnapshot(){
+  ensureZones();
+  if(window.MBStore&&StoreService.exportZones)return StoreService.exportZones();
+  return zoneNames().map((name,i)=>({id:'zone-'+i,name,collapsed:!!(zoneCollapsedList()[i]),order:i}));
+}
+function zoneIdAt(snapshot,idx){
+  const z=snapshot&&snapshot[idx];
+  return z&&z.id?String(z.id):('zone-'+idx);
+}
+function applyZoneIdentity(n,zone,zoneId){
+  n.zone=clampZone(zone);
+  if(zoneId)n.zoneId=String(zoneId);
+  noteCache.delete(n.id);
+}
+async function moveMemoZone(from,to){
+  ensureZones();from=Number(from);to=Number(to);
+  const count=zoneCount();
+  if(!Number.isInteger(from)||!Number.isInteger(to)||from<0||to<0||from>=count||to>=count||from===to)return;
+  const before=zoneSnapshot();
+  const activeZoneId=filter.zone!==null?zoneIdAt(before,filter.zone):null;
+  let changedOrder=false;
+  if(window.MBStore&&StoreService.reorderZone)changedOrder=StoreService.reorderZone(from,to);
+  else{
+    const name=meta.memoZones.splice(from,1)[0], collapsed=meta.collapsedZones.splice(from,1)[0];
+    meta.memoZones.splice(to,0,name);meta.collapsedZones.splice(to,0,collapsed);changedOrder=true;
+  }
+  if(!changedOrder)return;
+  const after=zoneSnapshot();
+  const changed=[];
+  notes.forEach(n=>{
+    const old=clampZone(n.zone);
+    const zid=String(n.zoneId||zoneIdAt(before,old));
+    const next=after.findIndex(z=>String(z.id)===zid);
+    if(next>=0&&(n.zone!==next||n.zoneId!==zid)){
+      applyZoneIdentity(n,next,zid);
+      changed.push(n);
+    }
+  });
+  if(activeZoneId){
+    const nextFilter=after.findIndex(z=>String(z.id)===activeZoneId);
+    filter.zone=nextFilter>=0?nextFilter:null;
+  }
+  const ok=await persistNotes(changed,{skipRender:true,keepUpdatedAt:true});
+  if(typeof saveZonesAndPublishManifest==='function')await saveZonesAndPublishManifest({silent:true});
+  else await metaSave({silent:true});
+  render();
+  toast(ok?'구역 순서를 변경했습니다':'구역 순서는 변경했지만 일부 메모 위치 저장에 실패했습니다');
+}
 function addMemoZone(){
   ensureZones();
   if(zoneCount()>=MAX_ZONES){toast('구역은 최대 '+MAX_ZONES+'개까지 가능합니다');return;}
   if(window.MBStore&&StoreService.addZone)StoreService.addZone();
   else {meta.memoZones.push('구역 '+(meta.memoZones.length+1));meta.collapsedZones.push(false);}
-  metaSave();render();toast('구역을 추가했습니다');
+  if(typeof saveZonesAndPublishManifest==='function')saveZonesAndPublishManifest({silent:true});
+  else metaSave();
+  render();toast('구역을 추가했습니다');
 }
 async function deleteMemoZone(idx){
   ensureZones();idx=Number(idx);
@@ -505,16 +555,20 @@ async function deleteMemoZone(idx){
   const name=names[idx]||('구역 '+(idx+1));
   const count=notes.filter(n=>!n.deletedAt&&clampZone(n.zone)===idx).length;
   const destIdx=idx>0?idx-1:0;
-  const destName=names[destIdx]||'인접 구역';
+  const destOldIdx=idx>0?idx-1:1;
+  const destName=names[destOldIdx]||names[destIdx]||'인접 구역';
   const msg='"'+name+'" 구역을 삭제할까요?'+(count?'\n메모 '+count+'개는 "'+destName+'" 구역으로 이동합니다.':'');
   if(!await MBDialog.confirm(msg,{title:'구역 삭제',okText:'삭제',danger:true,icon:'🗑'}))return;
+  const before=zoneSnapshot();
+  const destZoneId=zoneIdAt(before,destOldIdx);
   const changed=[];
   notes.forEach(n=>{
-    if(n.deletedAt)return;
     const old=clampZone(n.zone);let nz=old;
+    let zid=String(n.zoneId||zoneIdAt(before,old));
     if(old===idx)nz=destIdx;
     else if(old>idx)nz=old-1;
-    if(nz!==old){n.zone=nz;noteCache.delete(n.id);changed.push(n);}
+    if(old===idx)zid=destZoneId;
+    if(nz!==old||n.zoneId!==zid){applyZoneIdentity(n,nz,zid);changed.push(n);}
   });
   if(window.MBStore&&StoreService.removeZone)StoreService.removeZone(idx);
   else {meta.memoZones.splice(idx,1);meta.collapsedZones.splice(idx,1);}
@@ -522,5 +576,8 @@ async function deleteMemoZone(idx){
     if(filter.zone===idx)filter.zone=null;
     else if(filter.zone>idx)filter.zone--;
   }
-  await persistNotes(changed,{skipRender:true});await metaSave({silent:true});render();toast('구역을 삭제했습니다');
+  const ok=await persistNotes(changed,{skipRender:true,keepUpdatedAt:true});
+  if(typeof saveZonesAndPublishManifest==='function')await saveZonesAndPublishManifest({silent:true});
+  else await metaSave({silent:true});
+  render();toast(ok?'구역을 삭제했습니다':'구역은 삭제했지만 일부 메모 이동 저장에 실패했습니다');
 }

@@ -34,7 +34,7 @@ function normalizeSidebarOrderList(order){
 /* ================= StoreService: canonical meta.store + compatibility mirrors ================= */
 const StoreService=(()=>{
   const schema=STORE_SCHEMA_VERSION;
-  const VALID_VIEW=['memo','cal','settings'];
+  const VALID_VIEW=['memo','cal','settings','guide'];
   const VALID_SIZE=['title','small','normal','large'];
   const VALID_WORK_MODE=['default','work','writing','project'];
   const VALID_WORKSPACE=['personal','shared'];
@@ -215,6 +215,20 @@ const StoreService=(()=>{
     });
     return removed;
   }
+  function reorderZone(from,to){
+    from=Number(from);to=Number(to);
+    if(!Number.isInteger(from)||!Number.isInteger(to))return false;
+    let changed=false;
+    update(st=>{
+      const len=st.zones.length;
+      if(from<0||to<0||from>=len||to>=len||from===to)return;
+      const moved=st.zones.splice(from,1)[0];
+      st.zones.splice(to,0,moved);
+      st.zones.forEach((z,i)=>{z.order=i;});
+      changed=true;
+    });
+    return changed;
+  }
 
   function exportZones(){return zones().map(z=>({id:z.id,name:z.name,collapsed:!!z.collapsed,order:z.order}));}
   function comparableZones(list){return normalizeZones(list).map(z=>({id:z.id,name:z.name,collapsed:!!z.collapsed,order:z.order}));}
@@ -259,7 +273,7 @@ const StoreService=(()=>{
   function desktop(){return Object.assign({},normalize().desktop);}
   function setDesktopPatch(patch){return update(st=>{Object.assign(st.desktop,patch||{});});}
   function persistable(){normalize();return {schemaVersion:schema,store:JSON.parse(JSON.stringify(meta.store))};}
-  return {schema,normalize,persistable,update,zones,zoneNames,zoneCount,collapsedZones,setZoneName,setZoneCollapsed,toggleZoneCollapsed,addZone,removeZone,exportZones,applySharedZones,
+  return {schema,normalize,persistable,update,zones,zoneNames,zoneCount,collapsedZones,setZoneName,setZoneCollapsed,toggleZoneCollapsed,addZone,removeZone,reorderZone,exportZones,applySharedZones,
     sidebarOrder,setSidebarOrder,setSidebarCollapsed,toggleSidebarCollapsed,theme,setTheme,toggleTheme,view,setView,calMode,setCalMode,
     defaultSize,setDefaultSize,workMode,setWorkMode:setWorkModeValue,editorWide,setEditorWide,toggleEditorWide,workspace,setWorkspace,
     weeklyPinnedNoteId,setWeeklyPinnedNoteId,templates,setTemplates,backup,setBackupPatch,recordDataWrite,desktop,setDesktopPatch};
@@ -352,7 +366,7 @@ function sanitizeMeta(){
   if(window.MBStore&&StoreService.normalize)StoreService.normalize();
   else {
     meta.schemaVersion=APP_SCHEMA_VERSION;
-    if(!['memo','cal','settings'].includes(meta.view))meta.view='memo';
+    if(!['memo','cal','settings','guide'].includes(meta.view))meta.view='memo';
     if(meta.calMode!=='week')meta.calMode='month';
   }
   ensureZones();
@@ -389,7 +403,7 @@ function updateStorageInfo(){
 /* ================= service facades: storage + sync ================= */
 function comparableNote(n){
   n=n||{};
-  return JSON.stringify({title:n.title||'',body:n.body||'',tags:Array.isArray(n.tags)?n.tags.slice().sort():[],color:n.color||0,pinned:!!n.pinned,locked:!!n.locked,archived:!!n.archived,date:n.date||null,dueDate:n.dueDate||null,done:!!n.done,priority:n.priority||'normal',remind:n.remind||null,folder:n.folder||'',kind:n.kind||'memo',size:n.size||'',zone:Number(n.zone)||0,weeklyKey:n.weeklyKey||null,deletedAt:n.deletedAt||null});
+  return JSON.stringify({title:n.title||'',body:n.body||'',tags:Array.isArray(n.tags)?n.tags.slice().sort():[],color:n.color||0,pinned:!!n.pinned,locked:!!n.locked,archived:!!n.archived,date:n.date||null,dueDate:n.dueDate||null,done:!!n.done,priority:n.priority||'normal',remind:n.remind||null,folder:n.folder||'',kind:n.kind||'memo',size:n.size||'',zone:Number(n.zone)||0,zoneId:n.zoneId||null,weeklyKey:n.weeklyKey||null,deletedAt:n.deletedAt||null});
 }
 function activeSharedSource(){return window.SharedBoard&&typeof SharedBoard.isActive==='function'&&SharedBoard.isActive();}
 const StorageService={

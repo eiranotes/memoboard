@@ -83,6 +83,7 @@ struct SharedDeleteRequest {
   id: String,
   expected_updated_at: Option<u64>,
   expected_mtime: Option<u64>,
+  lock_token: Option<String>,
   author: Option<String>,
 }
 
@@ -956,6 +957,14 @@ fn shared_delete_note(state: tauri::State<AppState>, request: SharedDeleteReques
   if id.is_empty() { return Err("Shared note id is required".into()); }
   let path = shared_note_path(&root, &id);
   if !path.exists() { return Ok(json!({"ok":true,"missing":true})); }
+  if let Some(lock) = shared_lock_state(&root, &id) {
+    let expected_token = request.lock_token.clone().unwrap_or_default();
+    let lock_token = lock.get("token").and_then(Value::as_str).unwrap_or("");
+    if expected_token.is_empty() || expected_token != lock_token {
+      let owner = lock.get("owner").and_then(Value::as_str).unwrap_or("").to_string();
+      return Ok(json!({"ok":false,"locked":true,"lock":lock,"owner":owner}));
+    }
+  }
   let mut current = read_value(&path).ok_or_else(|| "Cannot read shared note".to_string())?;
   let expected = request.expected_updated_at.unwrap_or(0);
   let expected_mtime = request.expected_mtime.unwrap_or(0);

@@ -131,6 +131,9 @@ main{overflow:auto;position:relative}
 .mzonehead{display:flex;align-items:center;gap:7px;margin-bottom:9px;padding:0 2px}
 .mzonefold{width:24px;height:24px;border-radius:7px;color:var(--sub);font-size:12px;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .mzonefold:hover{background:var(--bg);color:var(--ink)}
+.zoneMove{width:22px;height:24px;border-radius:7px;color:var(--sub);font-size:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.zoneMove:hover:not(:disabled){background:var(--bg);color:var(--accent-ink)}
+.zoneMove:disabled{opacity:.35;cursor:default}
 .mzonehead input{flex:1;min-width:0;border:none;background:transparent;font-weight:800;font-size:13.5px;letter-spacing:-.1px;color:var(--ink);padding:4px 5px;border-radius:6px}
 .mzonehead input:hover,.mzonehead input:focus{background:var(--panel);outline:1px solid var(--line)}
 .mzonehead .cnt{font-size:11.5px;color:var(--sub);font-weight:700;font-variant-numeric:tabular-nums}
@@ -592,6 +595,10 @@ body.memo-dragging .card.dragging{pointer-events:none}
 .md-syntax b{display:block;font-size:12.5px;margin-bottom:5px;color:var(--ink)}
 .md-syntax code{display:block;margin-bottom:5px;white-space:pre-wrap;word-break:break-word}
 .md-syntax span{display:block;color:var(--sub);font-size:12px;line-height:1.45}
+.copyblock{position:relative;margin:0 0 7px;padding:10px 48px 10px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);overflow:auto}
+.copyblock code{display:block;white-space:pre;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;line-height:1.45;color:var(--ink)}
+.copybtn{position:absolute;top:6px;right:6px;border:1px solid var(--line);border-radius:7px;background:var(--panel);padding:3px 7px;font-size:11px;font-weight:700;color:var(--sub)}
+.copybtn:hover{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
 .md-note{font-size:12px;color:var(--sub);margin-top:8px!important}
 @media (max-width:1100px){.md-syntax-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shortcut-row{grid-template-columns:130px minmax(0,1fr)}}
 @media (max-width:760px){.md-syntax-grid{grid-template-columns:1fr}.helpgrid{grid-template-columns:1fr}.shortcut-row{grid-template-columns:1fr;gap:5px}}
@@ -672,3 +679,121 @@ body.workspace-shared .shared-only{display:flex!important}
 .card .card-preview.markdown-view .mermaid-block{margin:.5em 0;border-radius:10px}
 .card .card-preview.markdown-view .mermaid-diagram{padding:8px;max-height:220px;overflow:auto}
 [data-theme="dark"] .prose .mermaid-error{color:#FF9D96;background:rgba(178,58,52,.18)}
+
+/* Guide Page styling */
+.guide-basics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.guide-item {
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.guide-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.guide-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.guide-item-name {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 14px;
+}
+.guide-item-syntax {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--accent-ink);
+  text-align: right;
+  white-space: pre-wrap;
+}
+.guide-item-desc {
+  font-size: 12px;
+  color: var(--sub);
+  line-height: 1.5;
+}
+
+.guide-mermaid-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 14px;
+}
+.guide-mermaid-card {
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  border-radius: 14px;
+  padding: 16px;
+}
+.guide-mermaid-card h4 {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+.mermaid-desc {
+  font-size: 12.5px;
+  color: var(--sub);
+  margin: 0 0 12px 0;
+}
+.mermaid-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.mermaid-code {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  padding: 12px;
+  overflow: auto;
+}
+.mermaid-code pre {
+  margin: 0;
+}
+.mermaid-code code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.mermaid-preview {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  min-height: 150px;
+}
+.mermaid-preview .mermaid {
+  width: 100%;
+  text-align: center;
+}
+.mermaid-preview .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 768px) {
+  .mermaid-split {
+    grid-template-columns: 1fr;
+  }
+}

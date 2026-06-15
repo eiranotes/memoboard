@@ -48,5 +48,15 @@ if (ctx.MBMarkdown.mermaid() !== 'mermaid') fail('mermaid engine indicator shoul
   await ctx.MBMarkdown.renderMermaidIn(root);
   if (block.dataset.mermaidStatus !== 'rendered') fail('mermaid hydrate should render pending blocks');
   if (!/mermaid-diagram/.test(block.innerHTML) || !/<svg/.test(block.innerHTML)) fail('mermaid hydrate should inject rendered svg wrapper');
+  ctx.window.mermaid.render = async () => ({
+    svg: '<svg><script>alert(1)</script><g onclick="alert(1)"><a href="javascript:alert(1)"><foreignObject><div>x</div></foreignObject><text>safe</text></a></g></svg>'
+  });
+  const unsafeBlock = {
+    dataset: { mermaidStatus: 'pending' },
+    innerHTML: '',
+    querySelector(sel){ return sel === 'code.language-mermaid' ? { textContent: 'flowchart TD\n  A-->B' } : null; }
+  };
+  await ctx.MBMarkdown.renderMermaidIn({ querySelectorAll(sel){ return sel === '.mermaid-block' ? [unsafeBlock] : []; } });
+  if (/script|onclick|javascript:|foreignObject/i.test(unsafeBlock.innerHTML)) fail('mermaid sanitizer must strip executable SVG content');
   console.log('Mermaid regression OK');
 })().catch(err=>{ throw err; });

@@ -307,6 +307,10 @@ function normalizeNote(n){
   if(n.weeklyKey==='')n.weeklyKey=null;
   if(typeof n.body!=='string')n.body=n.body?String(n.body):'';
   if(typeof n.title!=='string')n.title=n.title?String(n.title):'';
+  if((!n.zoneId||typeof n.zoneId!=='string')&&window.MBStore&&StoreService.exportZones){
+    const z=StoreService.exportZones()[clampZone(n.zone)];
+    if(z&&z.id)n.zoneId=String(z.id);
+  }
   return n;}
 const noteCache=new Map();
 let currentIndex=null, dataRevision=0, indexRevision=-1;
@@ -435,7 +439,11 @@ function hl(code){let s=esc(code);
     return m;});}
 function safeLinkTarget(href){
   href=String(href||'').trim();
-  if(!href||/^(javascript|data|vbscript):/i.test(href))return '';
+  if(!href||/[\u0000-\u001f\u007f]/.test(href))return '';
+  if(/^\/\//.test(href))return '';
+  if(/^[a-z][a-z0-9+.-]*:/i.test(href)){
+    return /^(https?:|mailto:)/i.test(href)?href:'';
+  }
   return href;
 }
 function inlineMd(s){
@@ -544,6 +552,33 @@ let mermaidRenderToken=0;
 function mermaidPlaceholder(src){
   return '<div class="mermaid-block" data-mermaid-status="pending"><pre class="mermaid-source"><div class="code-lang">mermaid</div><code class="language-mermaid">'+esc(src||'')+'</code></pre></div>';
 }
+function sanitizeMermaidSvgFallback(svg){
+  return String(svg||'')
+    .replace(/<script\b[\s\S]*?<\/script\s*>/gi,'')
+    .replace(/<foreignObject\b[\s\S]*?<\/foreignObject\s*>/gi,'')
+    .replace(/\s+on[a-z0-9_-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi,'')
+    .replace(/\s+(?:href|xlink:href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\1/gi,'')
+    .replace(/\s+(?:href|xlink:href|src)\s*=\s*javascript:[^\s>]+/gi,'')
+    .replace(/\s+style\s*=\s*(["'])[\s\S]*?javascript:[\s\S]*?\1/gi,'');
+}
+function sanitizeMermaidSvg(svg){
+  svg=String(svg||'');
+  if(!svg)return '';
+  if(typeof document==='undefined'||!document||typeof document.createElement!=='function')return sanitizeMermaidSvgFallback(svg);
+  const tpl=document.createElement('template');
+  tpl.innerHTML=svg;
+  tpl.content.querySelectorAll('script,foreignObject').forEach(el=>el.remove());
+  tpl.content.querySelectorAll('*').forEach(el=>{
+    [...el.attributes].forEach(attr=>{
+      const name=String(attr.name||'');
+      const lower=name.toLowerCase();
+      const value=String(attr.value||'');
+      if(lower.startsWith('on')||/javascript:/i.test(value))el.removeAttribute(name);
+      else if((lower==='href'||lower==='xlink:href'||lower==='src')&&value&&!value.startsWith('#')&&!safeLinkTarget(value))el.removeAttribute(name);
+    });
+  });
+  return tpl.innerHTML;
+}
 function getMermaidRenderer(){
   const m=window.mermaid;
   if(!m||typeof m.render!=='function')return null;
@@ -578,9 +613,10 @@ async function renderMermaidIn(root){
       if(token!==mermaidRenderToken||!document.body.contains(block))continue;
       const svg=typeof res==='string'?res:(res&&res.svg)||'';
       if(!svg)throw new Error('Mermaid rendered an empty SVG');
-      block.innerHTML='<div class="mermaid-diagram">'+svg+'</div>';
+      const safeSvg=sanitizeMermaidSvg(svg);
+      if(!safeSvg||!/<svg[\s>]/i.test(safeSvg))throw new Error('Mermaid rendered an unsafe SVG');
+      block.innerHTML='<div class="mermaid-diagram">'+safeSvg+'</div>';
       block.dataset.mermaidStatus='rendered';
-      if(res&&typeof res.bindFunctions==='function')res.bindFunctions(block);
     }catch(e){
       const msg=esc((e&&e.message)||String(e)||'Mermaid render failed');
       block.dataset.mermaidStatus='error';

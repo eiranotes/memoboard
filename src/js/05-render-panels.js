@@ -51,10 +51,11 @@ function visible(){
 
 function render(){currentIndex=getIndex();updateStorageInfo();renderSidebar();updateWorkspaceSwitch();
   const m=$('#main');
-  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&!SharedBoard.state.configured&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'){m.innerHTML=SharedBoard.setupHtml();updateViewTabs();hydrateMainMarkdown(m);return;}
+  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&!SharedBoard.state.configured&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='guide'){m.innerHTML=SharedBoard.setupHtml();updateViewTabs();hydrateMainMarkdown(m);return;}
   if(filter.smart==='trash'){renderTrash(m);updateViewTabs();hydrateMainMarkdown(m);return;}
-  if(filter.smart==='today'&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'){renderTodayPanel(m);updateViewTabs();hydrateMainMarkdown(m);return;}
+  if(filter.smart==='today'&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='guide'){renderTodayPanel(m);updateViewTabs();hydrateMainMarkdown(m);return;}
   if((window.MBStore&&StoreService.view?StoreService.view():meta.view)==='settings')renderSettings(m);
+  else if((window.MBStore&&StoreService.view?StoreService.view():meta.view)==='guide')renderGuide(m);
   else if((window.MBStore&&StoreService.view?StoreService.view():meta.view)==='cal')renderCal(m);
   else renderMemo(m);
   updateViewTabs();hydrateMainMarkdown(m);}
@@ -388,7 +389,17 @@ function renderMemo(m){
   const names=zoneNames(), collapsedList=zoneCollapsedList();
   const minCol=zc<=5?260:240;
   let h='<div class="viewpad">'+wb+quickComposerHtml()+'<div class="zonebar"><button class="zoneadd" id="addZoneBtn">＋ 구역 추가</button><span class="hint">구역은 1~8개까지 가능 · 제목은 바로 수정</span></div><div class="memozones" style="grid-template-columns:repeat('+zc+',minmax('+minCol+'px,1fr));min-width:'+Math.max(0,zc*minCol)+'px">';
-  for(let z=0;z<zc;z++){const collapsed=!!collapsedList[z];const canDelete=zc>MIN_ZONES;h+='<section class="mzone'+(collapsed?' collapsed':'')+'" data-zone="'+z+'"><div class="mzonehead"><button class="mzonefold" data-zone-fold="'+z+'" title="구역 접기/펼치기">'+(collapsed?'▶':'▼')+'</button><input data-zone-name="'+z+'" value="'+esc(names[z]||('구역 '+(z+1)))+'" title="구역 이름 수정"><span class="cnt">'+by[z].length+'</span>'+(canDelete?'<button class="zoneDel" data-zone-del="'+z+'" title="구역 삭제">×</button>':'')+'</div><div class="mzonelist" data-zone="'+z+'">'+by[z].map(card).join('')+'</div></section>';}
+  for(let z=0;z<zc;z++){
+    const collapsed=!!collapsedList[z], canDelete=zc>MIN_ZONES;
+    const moveBtns='<button class="zoneMove" data-zone-move="'+z+'" data-zone-to="'+(z-1)+'" title="구역을 왼쪽으로" '+(z===0?'disabled':'')+'>‹</button>'+
+      '<button class="zoneMove" data-zone-move="'+z+'" data-zone-to="'+(z+1)+'" title="구역을 오른쪽으로" '+(z===zc-1?'disabled':'')+'>›</button>';
+    h+='<section class="mzone'+(collapsed?' collapsed':'')+'" data-zone="'+z+'"><div class="mzonehead">'+
+      '<button class="mzonefold" data-zone-fold="'+z+'" title="구역 접기/펼치기">'+(collapsed?'▶':'▼')+'</button>'+
+      moveBtns+
+      '<input data-zone-name="'+z+'" value="'+esc(names[z]||('구역 '+(z+1)))+'" title="구역 이름 수정"><span class="cnt">'+by[z].length+'</span>'+
+      (canDelete?'<button class="zoneDel" data-zone-del="'+z+'" title="구역 삭제">×</button>':'')+
+      '</div><div class="mzonelist" data-zone="'+z+'">'+by[z].map(card).join('')+'</div></section>';
+  }
   h+='</div></div>';m.innerHTML=h;bindQuickComposer(m);
 }
 
@@ -526,7 +537,6 @@ function renderSettings(m){
     '<section class="setting-card"><h3>백업 / 복구</h3>'+backupHealthMarkup()+'<div class="setting-actions"><button data-settings-act="export">JSON 내보내기</button><button data-settings-act="import">JSON 가져오기</button><button data-settings-act="md-export-folder">Markdown 폴더 내보내기</button><button data-settings-act="md-import-folder">Markdown 폴더 가져오기</button><button data-settings-act="autobackup-setup">자동백업 폴더 지정</button><button data-settings-act="autobackup-run">자동백업 지금 실행</button><button data-settings-act="autobackup-snapshot">스냅샷 켜기/끄기</button><button data-settings-act="autobackup-off">자동백업 해제</button><button data-settings-act="restore-center">복구 센터</button></div></section>'+
     sharedWorkspaceSettingsMarkup()+
     '<section class="setting-card"><h3>메모 / 보기</h3><div class="setting-actions"><button data-settings-act="quick-note">빠른 메모</button><button data-settings-act="template-manager">템플릿 관리자</button><button data-settings-act="notif">알림 권한</button><button data-settings-act="trash">휴지통</button><button data-settings-act="bulk-size" data-size="large">전체 크게</button></div></section>'+
-    markdownBasicsCardMarkup()+
     '<section class="setting-card full"><h3>도움말 / 기능 설명</h3><div class="helpgrid">'+
       '<div class="helpitem"><b>메모</b><span>구역별 카드 보드입니다. 카드의 ⠿ 핸들을 잡고 구역과 순서를 바꿉니다.</span></div>'+ 
       '<div class="helpitem"><b>검색</b><span><code>tag:</code> <code>folder:</code> <code>kind:</code> <code>due:</code> <code>date:</code> <code>title:</code> <code>body:</code> <code>is:</code> 조합 검색을 지원합니다.</span></div>'+ 
@@ -540,7 +550,7 @@ function renderSettings(m){
       '<div class="line"><b>공유 보드</b><span>상단 개인/공유 토글에서 공유를 선택해 폴더를 지정합니다. 공유폴더에는 <code>notes</code>, <code>locks</code>, <code>trash</code>, <code>manifest.json</code>이 생성됩니다.</span></div>'+ 
       '<div class="line"><b>Alt + 1 / 2 / 3 / 4</b><span>전체 카드 크기: 제목만 / 작게 / 보통 / 크게</span></div>'+ 
       '<div class="line"><b>검색 예시</b><span><code>tag:업무 due:week -is:done</code> <code>title:회의 body:SQL</code> <code>before:2026-07-01</code></span></div>'+ 
-    '</div>'+markdownShortcutHelpMarkup()+markdownSyntaxHelpMarkup()+
+    '</div>'+
     '<div class="setting-actions" style="margin-top:10px"><button data-settings-act="reset-sidebar-order">좌측 순서 초기화</button></div></section>'+ 
     '<section class="setting-card full copyright"><span>© GSP reserved</span><small>Local-first Memoboard desktop utility</small></section>'+
   '</div></div>';
@@ -548,4 +558,77 @@ function renderSettings(m){
   const ro=m.querySelector('#settingsOpacity');
   if(ro)ro.addEventListener('input',()=>{const v=Number(ro.value);const out=$('#settingsOpacityVal');if(out)out.textContent=v+'%';DesktopWindowManager.setOpacity(v/100);});
   if(window.SharedBoard&&SharedBoard.state&&SharedBoard.state.configured&&!SharedBoard.state.health){SharedBoard.inspect(true);}
+}
+
+function renderGuide(m){
+  const copyBlock=(code,lang)=>'<pre class="copyblock"><button class="copybtn" data-guide-copy="'+escAttr(code)+'">복사</button><code class="'+(lang?'language-'+escAttr(lang):'')+'">'+esc(code)+'</code></pre>';
+  const markdownRows=[
+    ['제목','# 프로젝트 메모\n## 결정 사항','문서를 큰 단락으로 나눕니다.'],
+    ['굵게','**중요**','핵심 단어를 강조합니다.'],
+    ['기울임','*참고*','보조 설명이나 참고를 표시합니다.'],
+    ['번호 목록','1. 첫 번째\n2. 두 번째','순서가 있는 절차를 적습니다.'],
+    ['체크박스','- [ ] 할 일\n- [x] 완료','카드와 보기 모드에서 바로 체크할 수 있습니다.'],
+    ['표','| 항목 | 상태 |\n|---|---|\n| 초안 | 진행 |','간단한 비교 표를 만듭니다.'],
+    ['코드블록','```sql\nSELECT *\n  FROM memo;\n```','긴 코드, SQL, 프롬프트를 보관합니다.'],
+    ['링크','[문서](example.com)','허용: http, https, mailto, 상대경로. file과 script 계열은 차단됩니다.']
+  ];
+  const appShortcuts=[
+    ['Alt+N','새 메모를 만듭니다.'],
+    ['Ctrl+K','명령 팔레트를 엽니다.'],
+    ['Ctrl+1 / Ctrl+2 / Ctrl+3','메모, 달력, 설정 탭으로 이동합니다.'],
+    ['/','검색창에 포커스합니다.'],
+    ['?','단축키 도움말을 엽니다.'],
+    ['Ctrl+Shift+M','빠른 메모 입력창을 엽니다.'],
+    ['Alt+1 / Alt+2 / Alt+3 / Alt+4','전체 카드 크기를 제목만, 작게, 보통, 크게로 바꿉니다.']
+  ];
+  const editorShortcuts=[
+    ['Ctrl+B','선택 영역을 **굵게** 감쌉니다.'],
+    ['Ctrl+I','선택 영역을 *기울임*으로 감쌉니다.'],
+    ['Ctrl+`','선택 영역을 `인라인 코드`로 감쌉니다.'],
+    ['Ctrl+Shift+X','선택 영역에 ~~취소선~~을 적용합니다.'],
+    ['Ctrl+Shift+H','현재 줄의 제목 단계를 바꿉니다.'],
+    ['Ctrl+Shift+K','선택 줄을 체크리스트로 바꿉니다.'],
+    ['Ctrl+Shift+7 / Ctrl+Shift+8','선택 줄을 번호 목록 또는 불릿 목록으로 바꿉니다.'],
+    ['Ctrl+Shift+Q','선택 줄을 인용문으로 바꿉니다.'],
+    ['Ctrl+Shift+C','SQL 코드블록을 삽입합니다.'],
+    ['Ctrl+Shift+L / Ctrl+Shift+T','링크 또는 2열 표를 삽입합니다.']
+  ];
+  const mermaidRows=[
+    {
+      title:'flowchart',
+      desc:'업무 흐름, 의사결정, 처리 단계를 연결합니다.',
+      code:'```mermaid\nflowchart TD\n  A[아이디어] --> B{검토}\n  B -- 승인 --> C[실행]\n  B -- 보류 --> D[수정]\n```'
+    },
+    {
+      title:'sequenceDiagram',
+      desc:'사용자, 앱, 서버 같은 주체 사이의 호출 순서를 표시합니다.',
+      code:'```mermaid\nsequenceDiagram\n  participant User as 사용자\n  participant App as MemoBoard\n  participant Store as 저장소\n  User->>App: 메모 저장\n  App->>Store: JSON 쓰기\n  Store-->>App: 완료\n  App-->>User: 저장 표시\n```'
+    }
+  ];
+  const syntaxGrid=markdownRows.map(r=>
+    '<div class="md-syntax"><b>'+esc(r[0])+'</b>'+copyBlock(r[1],'markdown')+'<span>'+esc(r[2])+'</span></div>'
+  ).join('');
+  const shortcutRows=rows=>rows.map(r=>
+    '<div class="shortcut-row"><kbd>'+esc(r[0])+'</kbd><span>'+esc(r[1])+'</span></div>'
+  ).join('');
+  const mermaidHtml=mermaidRows.map(r=>{
+    const raw=r.code.replace(/^```mermaid\n/,'').replace(/\n```$/,'');
+    const preview=(typeof md2html==='function')?md2html(r.code):copyBlock(raw,'mermaid');
+    return '<div class="guide-mermaid-card"><h4>'+esc(r.title)+'</h4><p class="mermaid-desc">'+esc(r.desc)+'</p>'+
+      '<div class="mermaid-split"><div class="mermaid-code">'+copyBlock(r.code,'markdown')+'</div>'+
+      '<div class="mermaid-preview prose markdown-view">'+preview+'</div></div></div>';
+  }).join('');
+  const allowedLinks=copyBlock('[상대경로](docs/plan.md)\n[메일](mailto:team@example.com)\n[웹](example.com)','markdown');
+  m.innerHTML='<div class="settings guide-page"><h2>사용법</h2><div class="settings-grid">'+
+    '<section class="setting-card full"><h3>Markdown 문법 표</h3><div class="md-syntax-grid">'+syntaxGrid+'</div></section>'+
+    '<section class="setting-card"><h3>앱 단축키</h3><div class="shortcut-table">'+shortcutRows(appShortcuts)+'</div></section>'+
+    '<section class="setting-card"><h3>에디터 전용 Markdown 단축키</h3><div class="shortcut-table">'+shortcutRows(editorShortcuts)+'</div></section>'+
+    '<section class="setting-card full"><h3>링크 작성과 보안</h3><p class="md-note">링크는 http, https, mailto, 상대경로만 허용됩니다. file, javascript, data, vbscript 형식은 렌더링에서 제외됩니다.</p>'+allowedLinks+'</section>'+
+    '<section class="setting-card full"><h3>Mermaid 작성법</h3><p class="md-note">반드시 <code>```mermaid</code> 코드블록 안에 작성합니다. 렌더된 SVG는 삽입 전에 script, on 이벤트, javascript URL, foreignObject를 제거합니다.</p><div class="guide-mermaid-grid">'+mermaidHtml+'</div></section>'+
+    '</div></div>';
+  m.querySelectorAll('[data-guide-copy]').forEach(btn=>btn.addEventListener('click',()=>{
+    const text=btn.getAttribute('data-guide-copy')||'';
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(()=>toast('코드블록을 복사했습니다')).catch(()=>toast('복사에 실패했습니다'));
+    else toast('이 환경에서는 클립보드 복사를 사용할 수 없습니다');
+  }));
 }

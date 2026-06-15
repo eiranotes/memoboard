@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 const src = ['src/index.html','src/js/02-store-services.js','src/js/04-utils-markdown.js','src/js/05-render-panels.js','src/js/06-calendar.js','src/js/09-main-sidebar-events.js','src/js/10-header-io-notification.js','src/js/11-commands-help-keys.js','src/js/13-shared-board.js','src-tauri/src/main.rs'].map(read).join('\n');
@@ -44,5 +45,32 @@ const sharedSrc = read('src/js/13-shared-board.js');
 if ((sharedSrc.match(/if\(!hasIdentity\(\)\)\{await requireIdentity\(\);return false;\}/g)||[]).length < 3) fail('shared write paths must require explicit display name');
 if (!/if\(!hasIdentity\(\)\)\{requireIdentity\(\);return false;\}/.test(sharedSrc)) fail('shared quick-create path must require explicit display name');
 if (/unwrap_or_else\(\|\|\s*"익명"\.to_string\(\)\)/.test(read('src-tauri/src/main.rs'))) fail('native shared lock must not fall back to anonymous owner');
+
+{
+  const context = {
+    console,
+    window: {},
+    DEFAULT_ZONES: ['A', 'B', 'C'],
+    MIN_ZONES: 1,
+    MAX_ZONES: 8
+  };
+  vm.createContext(context);
+  vm.runInContext(read('src/js/02-store-services.js'), context, {filename:'02-store-services.js'});
+  const order = vm.runInContext(`
+    (() => {
+      const store = window.MBStore;
+      store.update(st => {
+        st.zones = [
+          {id:'a', name:'A', collapsed:false, order:0},
+          {id:'b', name:'B', collapsed:false, order:1},
+          {id:'c', name:'C', collapsed:false, order:2}
+        ];
+      });
+      if (!store.reorderZone(1, 0)) return 'no-change';
+      return store.exportZones().map(z => z.id + ':' + z.order).join('|');
+    })()
+  `, context);
+  if (order !== 'b:0|a:1|c:2') fail('zone reorder must persist normalized order, got: ' + order);
+}
 
 console.log('Regression scenarios OK');

@@ -19,6 +19,9 @@ html = render('1. 숫자 목록\n- bullet');
 if (!/<ol><li>숫자 목록<\/li><\/ol><ul><li>bullet<\/li><\/ul>/.test(html)) fail('ordered and unordered lists must not be merged');
 html = render('```txt\n10. code\n```\n10. list');
 if (!/<pre>/.test(html) || !/<ol start="10">/.test(html)) fail('fenced code and ordered list must both render');
+html = render('[file](file:///C:/secret.txt) [js](javascript:alert(1)) [mail](mailto:team@example.com)');
+if (/href="file:/i.test(html) || /href="javascript:/i.test(html)) fail('unsafe link schemes must be blocked');
+if (!/href="mailto:team@example.com"/.test(html)) fail('mailto links should remain allowed');
 
 
 try {
@@ -48,6 +51,8 @@ try {
   if (!/class="mermaid-block"/.test(mmd) || !/language-mermaid/.test(mmd)) fail('markdown-it mermaid fence placeholder missing');
   const link = ctx2.MBMarkdown.render('[문서](https://example.com)');
   if (!/target="_blank"/.test(link) || !/rel="noopener noreferrer"/.test(link)) fail('markdown-it links must not navigate the app webview');
+  const unsafe = ctx2.MBMarkdown.render('[file](file:///C:/secret.txt) [proto](//example.com) [js](javascript:alert(1))');
+  if (/href="file:/i.test(unsafe) || /href="\/\//.test(unsafe) || /href="javascript:/i.test(unsafe)) fail('markdown-it unsafe schemes must be blocked');
 } catch (err) {
   throw err;
 }
