@@ -41,8 +41,8 @@ echo.
 echo [7/7] Copying release executable...
 if not exist dist mkdir dist
 if exist "src-tauri\target\release\memoboard.exe" (
-  copy /Y "src-tauri\target\release\memoboard.exe" "dist\Memoboard-Tauri-1.0.0.exe" >nul
-  echo Output: dist\Memoboard-Tauri-1.0.0.exe
+  copy /Y "src-tauri\target\release\memoboard.exe" "dist\Memoboard-Tauri-1.0.1.exe" >nul
+  echo Output: dist\Memoboard-Tauri-1.0.1.exe
 ) else (
   echo Could not find src-tauri\target\release\memoboard.exe
   echo Check src-tauri\target\release manually.

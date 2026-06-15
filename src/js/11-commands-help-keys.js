@@ -69,7 +69,7 @@ $('#palWrap').addEventListener('mousedown',e=>{if(e.target===$('#palWrap'))close
 function openHelp(){
   const rows=[['Alt + N','새 메모'],['Ctrl + K','명령 팔레트 / 메모 점프'],['Ctrl + 1 · 2 · 3','메모 / 달력 / 설정 탭'],['개인/공유 토글','상단 토글 또는 명령 팔레트로 데이터 소스 전환'],['Alt + 1 · 2 · 3 · 4','전체 카드 크기: 제목만 · 작게 · 보통 · 크게'],['/','검색창 포커스'],
     ['드래그','메모 카드 이동 · 달력 일정 날짜 이동 · 좌측 카테고리 순서 변경'],['Ctrl + Shift + M','전역 빠른 메모 입력창'],['📍/투명도/미니','항상 최상단 · 창 투명도 · 미니 플로팅'],['⋯ 메뉴','트레이 숨김 · 복구 센터 · 템플릿 관리자 · 자동 백업'],
-    ['?','이 도움말'],['Esc','에디터 저장 후 닫기'],['Ctrl + S','(에디터) 즉시 저장'],['Tab','(에디터) 들여쓰기'],
+    ['?','이 도움말'],['Esc','에디터 취소/닫기'],['Ctrl + S','(에디터) 즉시 저장'],['Tab','(에디터) 들여쓰기'],
     ['','— 검색 연산자 —'],['tag:업무 folder:프로젝트 kind:task priority:high'],['due:today · due:week · due:overdue · date:today · before:2026-07-01'],['title:회의 body:SQL · is:done · is:pinned · is:locked · is:archived'],
     ['','— 마크다운 문법 —'],['# 제목 · ## 소제목 · --- 구분선'],['**굵게** · *기울임* · ~~취소~~ · ==형광펜== · `인라인 코드`'],['- [ ] 체크리스트 · - 목록 · 1. 번호 목록 · > 인용문'],['```sql 코드블록``` · [링크](example.com) · [[위키링크]] · | 표 |'],
     ['','— 에디터 전용 마크다운 단축키 —'],['Ctrl+B / Ctrl+I / Ctrl+`','굵게 · 기울임 · 인라인 코드'],['Ctrl+Shift+X / H / K','취소선 · 제목 · 체크리스트'],['Ctrl+Shift+7 / 8 / Q','번호 목록 · 불릿 목록 · 인용문'],['Ctrl+Shift+C / L / T','코드블록 · 링크 · 표']];
@@ -90,7 +90,7 @@ document.addEventListener('keydown',e=>{
     if($('#quickWrap').classList.contains('open')){QuickMemo.close();return;}
     if($('#restoreWrap').classList.contains('open')){$('#restoreWrap').classList.remove('open');return;}
     if($('#tplWrap').classList.contains('open')){$('#tplWrap').classList.remove('open');return;}
-    if($('#edWrap').classList.contains('open')){closeEditor();return;}
+    if($('#edWrap').classList.contains('open')){if(window.MBEditor&&MBEditor.cancel)MBEditor.cancel();else closeEditor();return;}
     if(filter.q){filter.q='';$('#q').value='';render();return;}}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPal();return;}
   if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='m'){e.preventDefault();QuickMemo.open();return;}

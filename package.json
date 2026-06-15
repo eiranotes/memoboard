@@ -1,18 +1,25 @@
 {
   "name": "memoboard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A local-first desktop memo board app built with Tauri.",
   "author": "Yomiai",
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "check": "node tools/check-renderer-js.js && node tools/audit-static.js && node tools/regression-scenarios.js",
+    "check": "node tools/check-renderer-js.js && node tools/audit-static.js && node tools/regression-scenarios.js && node tools/manifest-regression.js && node tools/markdown-regression.js && node tools/mermaid-regression.js",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "build": "npm run check && npm run tauri:build"
+    "build": "npm run check && npm run tauri:build",
+    "vendor:markdown-it": "node tools/vendor-markdown-it.js",
+    "postinstall": "node tools/vendor-markdown-it.js && node tools/vendor-mermaid.js",
+    "vendor:mermaid": "node tools/vendor-mermaid.js"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "markdown-it": "^14.2.0",
+    "mermaid": "^11.15.0"
+  }
 }

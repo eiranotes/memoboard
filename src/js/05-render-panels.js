@@ -51,14 +51,15 @@ function visible(){
 
 function render(){currentIndex=getIndex();updateStorageInfo();renderSidebar();updateWorkspaceSwitch();
   const m=$('#main');
-  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&!SharedBoard.state.configured&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'){m.innerHTML=SharedBoard.setupHtml();updateViewTabs();return;}
-  if(filter.smart==='trash'){renderTrash(m);updateViewTabs();return;}
-  if(filter.smart==='today'&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'){renderTodayPanel(m);updateViewTabs();return;}
+  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&!SharedBoard.state.configured&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'){m.innerHTML=SharedBoard.setupHtml();updateViewTabs();hydrateMainMarkdown(m);return;}
+  if(filter.smart==='trash'){renderTrash(m);updateViewTabs();hydrateMainMarkdown(m);return;}
+  if(filter.smart==='today'&&(window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='settings'){renderTodayPanel(m);updateViewTabs();hydrateMainMarkdown(m);return;}
   if((window.MBStore&&StoreService.view?StoreService.view():meta.view)==='settings')renderSettings(m);
   else if((window.MBStore&&StoreService.view?StoreService.view():meta.view)==='cal')renderCal(m);
   else renderMemo(m);
-  updateViewTabs();}
+  updateViewTabs();hydrateMainMarkdown(m);}
 function updateViewTabs(){ $$('#viewTabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===(window.MBStore&&StoreService.view?StoreService.view():meta.view))); }
+function hydrateMainMarkdown(root){if(window.MBMarkdown&&typeof window.MBMarkdown.hydrate==='function')window.MBMarkdown.hydrate(root||$('#main'));}
 
 function navItemHtml(attrs,icon,label,count,on){
   const attr=Object.entries(attrs||{}).map(([k,v])=>' '+k+'="'+esc(v)+'"').join('');
@@ -220,16 +221,21 @@ function clipCardMarkdown(src,size){
   const maxChars=size==='large'?900:(size==='normal'?420:160);
   const lines=String(src||'').split(/\r?\n/);
   const out=[];
-  let shown=0,chars=0,inFence=false,clipped=false,taskIdx=0;
+  let shown=0,chars=0,inFence=false,fenceLang='',clipped=false;
   for(const raw of lines){
-    const isFence=/^```/.test(raw);
-    if(isFence){
+    const fm=raw.match(/^```\s*([^`]*)\s*$/);
+    if(fm){
       if(!inFence&&shown>=maxLines){clipped=true;break;}
       out.push(raw);
       inFence=!inFence;
+      fenceLang=inFence?String(fm[1]||'').trim().toLowerCase():'';
       continue;
     }
     if(inFence){
+      if(fenceLang==='mermaid'){
+        out.push(raw);
+        continue;
+      }
       if(chars<maxChars&&shown<maxLines){
         const remain=Math.max(0,maxChars-chars);
         const cut=raw.length>remain?raw.slice(0,remain)+'…':raw;
@@ -252,8 +258,6 @@ function clipCardMarkdown(src,size){
       line=raw.slice(0,rawLimit)+'…';
       clipped=true;
     }
-    const tm=raw.match(/^\s*(?:[-*]|\d+\.)\s+\[( |x|X)\]/);
-    if(tm)taskIdx++;
     out.push(line);
     chars+=plain.length;
     shown++;
@@ -282,7 +286,7 @@ function noteCardMarkup(n,q,opts){
   const tags=visibleTags(src||n,3);
   const tagHtml=tags.shown.length?'<div class="tags">'+tags.shown.map(t=>'<span class="minitag" data-tag="'+esc(t)+'">#'+esc(t)+'</span>').join('')+(tags.more?'<span class="minitag">+'+tags.more+'</span>':'')+'</div>':'';
   const titleMeta=size==='title'?compactMetaHtml(src||n,d):'';
-  return '<div class="card c'+n.color+' sz-'+size+(n._shared?' shared-note':'')+(n.pinned?' pinned':'')+(n.locked?' locked':'')+(n.archived?' archived':'')+'" data-id="'+n.id+'" tabindex="0" title="'+SIZE_LABEL[size]+' 카드 · 핸들을 잡고 구역 이동"><div class="titleline"><span class="draghandle" title="구역 이동/순서 변경">⠿</span><div class="t">'+hiText(dispTitle(n),q)+'</div>'+titleMeta+'</div>'+(bodyHtml?'<div class="b card-preview">'+bodyHtml+'</div>':'')+(size!=='title'?tagHtml:'')+'<div class="foot">'+badgeHtml(n)+'<span class="reltime">'+relTime(n.updatedAt)+'</span></div>'+actsHtml(n)+'</div>';
+  return '<div class="card c'+n.color+' sz-'+size+(n._shared?' shared-note':'')+(n.pinned?' pinned':'')+(n.locked?' locked':'')+(n.archived?' archived':'')+'" data-id="'+n.id+'" tabindex="0" title="'+SIZE_LABEL[size]+' 카드 · 핸들을 잡고 구역 이동"><div class="titleline"><span class="draghandle" title="구역 이동/순서 변경">⠿</span><div class="t">'+hiText(dispTitle(n),q)+'</div>'+titleMeta+'</div>'+(bodyHtml?'<div class="b card-preview prose markdown-view">'+bodyHtml+'</div>':'')+(size!=='title'?tagHtml:'')+'<div class="foot">'+badgeHtml(n)+'<span class="reltime">'+relTime(n.updatedAt)+'</span></div>'+actsHtml(n)+'</div>';
 }
 
 
@@ -294,18 +298,18 @@ function updateCardDom(noteId){
   const box=document.createElement('div');
   box.innerHTML=html;
   const next=box.firstElementChild;
-  if(next){card.replaceWith(next);return true;}
+  if(next){card.replaceWith(next);hydrateMainMarkdown(next);return true;}
   return false;
 }
 
-function quickComposerHtml(){return '<div class="quickcomposer compact" id="quickComposer"><span>＋</span><span class="qc-placeholder">빠르게 메모 입력...</span><span style="font-size:11px;color:var(--sub)">Keep식 빠른 입력</span></div>';}
+function quickComposerHtml(){return '<div class="quickcomposer compact" id="quickComposer"><span>＋</span><span class="qc-placeholder">빠르게 메모 입력...</span><span class="qc-hint">Keep식 빠른 입력</span></div>';}
 function bindQuickComposer(root){
   const box=root.querySelector('#quickComposer');
   if(!box)return;
 
   function close(){
     box.className='quickcomposer compact';
-    box.innerHTML='<span>＋</span><span class="qc-placeholder">빠르게 메모 입력...</span><span style="font-size:11px;color:var(--sub)">Keep식 빠른 입력</span>';
+    box.innerHTML='<span>＋</span><span class="qc-placeholder">빠르게 메모 입력...</span><span class="qc-hint">Keep식 빠른 입력</span>';
     bindQuickComposer(root);
   }
 
@@ -315,9 +319,9 @@ function bindQuickComposer(root){
       '<input id="qcTitle" placeholder="제목은 선택 입력" autocomplete="off">',
       '<textarea id="qcBody" placeholder="메모를 바로 적고 Ctrl+Enter로 저장"></textarea>',
       '<div class="qc-actions">',
-      '<label>유형 <select id="qcKind">'+kindOptions('memo')+'</select></label>',
-      '<label><input type="checkbox" id="qcPinned"> 고정</label>',
-      '<label><input type="checkbox" id="qcTask"> 업무/마감</label>',
+      '<label class="qc-kind"><span>유형</span><select id="qcKind">'+kindOptions('memo')+'</select></label>',
+      '<label class="qc-check"><input type="checkbox" id="qcPinned"><span>고정</span></label>',
+      '<label class="qc-check"><input type="checkbox" id="qcTask"><span>업무/마감</span></label>',
       '<div class="hspace"></div>',
       '<button class="qc-btn" id="qcCancel">닫기</button>',
       '<button class="qc-btn primary2" id="qcSave">저장</button>',
@@ -345,7 +349,6 @@ function bindQuickComposer(root){
       persistNote(n,{skipRender:true}).then(()=>{
         toast('메모를 추가했습니다');
         render();
-        openEditor(n.id,'edit');
       });
     };
 
@@ -462,6 +465,57 @@ function markdownSyntaxHelpMarkup(){
     '<div class="md-syntax"><b>'+esc(r.name)+'</b><code>'+esc(r.syntax)+'</code><span>'+esc(r.desc)+'</span></div>'
   ).join('')+'</div><p class="md-note">HTML 직접 입력, 스크립트 실행, 파일 첨부형 이미지 저장은 지원하지 않습니다. 이미지 문법은 참조 배지로 표시합니다.</p></div>';
 }
+
+function markdownBasicsCardMarkup(){
+  const rows=[
+    ['체크리스트','- [ ] 할 일\n- [x] 완료'],['목록','- 항목\n1. 순서 항목'],['제목','# 제목\n## 소제목'],
+    ['강조','**굵게** · *기울임* · ~~취소~~ · ==형광펜=='],['인용/구분','> 인용문\n---'],['코드','`단축키`\n```sql\nSELECT *\n```'],
+    ['링크','[문서](example.com)\n[[위키링크]]'],['표','| A | B |\n|---|---|\n| 1 | 2 |']
+  ];
+  return '<section class="setting-card full markdown-basics"><h3>마크다운 기본 문법</h3><p>메모 본문과 카드 미리보기에서 바로 렌더링됩니다. 체크리스트는 미리보기에서 직접 체크할 수 있습니다.</p><div class="markdown-basic-grid">'+rows.map(r=>
+    '<div class="markdown-basic"><b>'+esc(r[0])+'</b><pre>'+esc(r[1])+'</pre></div>'
+  ).join('')+'</div></section>';
+}
+
+function formatBytes(bytes){
+  bytes=Number(bytes)||0;
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(1)+' KB';
+  return (bytes/1024/1024).toFixed(2)+' MB';
+}
+function sharedWorkspaceSettingsMarkup(){
+  const sb=window.SharedBoard;
+  const active=((window.MBStore&&StoreService.workspace?StoreService.workspace():meta.workspace)==='shared');
+  const root=sb&&sb.state.root?sb.state.root:'';
+  const h=sb&&sb.state.health?sb.state.health:null;
+  const mf=sb&&sb.state.manifest?sb.state.manifest:null;
+  const bytes=h&&h.bytes?h.bytes:{};
+  const zoneCount=mf&&Array.isArray(mf.zones)?mf.zones.length:0;
+  const updatedAt=mf&&Number(mf.updatedAt)?relTime(Number(mf.updatedAt)):'미기록';
+  const updatedBy=mf&&mf.updatedBy?String(mf.updatedBy):'미기록';
+  const healthHtml=h?'<div class="shared-health-grid">'+
+    '<div><b>'+Number(h.liveNotes||0)+'</b><span>활성 메모</span></div>'+
+    '<div><b>'+Number(h.deletedNotes||0)+'</b><span>삭제 메모</span></div>'+
+    '<div><b>'+Number(h.activeLocks||0)+'</b><span>편집 잠금</span></div>'+
+    '<div class="'+(Number(h.corruptNotes||0)?'risk':'')+'"><b>'+Number(h.corruptNotes||0)+'</b><span>손상 파일</span></div>'+
+    '<div><b>'+formatBytes(bytes.total||0)+'</b><span>총 용량</span></div>'+
+    '<div><b>'+formatBytes(bytes.notes||0)+'</b><span>메모 파일</span></div>'+
+  '</div>':'<p class="muted">공유폴더 상태를 아직 점검하지 않았습니다.</p>';
+  const manifestHtml='<div class="setting-list shared-manifest-list">'+
+    '<div class="line"><b>매니페스트 구역</b><span>'+zoneCount+'개</span></div>'+
+    '<div class="line"><b>마지막 수정</b><span>'+esc(updatedAt)+' · '+esc(updatedBy)+'</span></div>'+
+    '<div class="line"><b>잠금 정책</b><span>편집 시 잠금 파일을 생성하고, 다른 사용자가 편집 중이면 열지 않습니다.</span></div>'+
+  '</div>';
+  return '<section class="setting-card full shared-settings-card"><h3>공유 작업함</h3>'+
+    '<div class="setting-list"><div class="line"><b>현재 모드</b><span>'+(active?'공유':'개인')+'</span></div><div class="line"><b>공유폴더</b><span>'+(root?esc(root):'미지정')+'</span></div></div>'+
+    '<div class="setting-row"><span>표시 이름</span><input id="sharedDisplayName" value="'+escAttr(sb&&sb.displayName?sb.displayName():'')+'" placeholder="공유 표시 이름"><button class="softbtn" data-shared-name-save="1">저장</button></div>'+
+    '<div class="setting-actions"><button data-workspace="personal">개인 작업함</button><button data-workspace="shared">공유 작업함</button><button data-shared-pick="1">공유폴더 선택/변경</button><button data-shared-refresh="1">공유 새로고침</button><button data-shared-open-root="1">폴더 열기</button></div>'+
+    '<h4>공유폴더 상태</h4>'+healthHtml+
+    '<div class="setting-actions"><button data-shared-inspect="1">용량/잠금 점검</button><button data-shared-compact="1">공유폴더 정리</button><button data-shared-manifest-apply="1">매니페스트 적용</button><button data-shared-manifest-publish="1">현재 구역을 매니페스트에 저장</button></div>'+
+    '<h4>공유 매니페스트</h4>'+manifestHtml+
+    '<p>같은 공유폴더를 지정한 사용자에게 메모와 매니페스트 구역 설정이 적용됩니다. 구역 이름/개수/순서를 바꾼 뒤에는 “현재 구역을 매니페스트에 저장”을 눌러 팀 기준으로 고정하세요.</p>'+
+  '</section>';
+}
 function renderSettings(m){
   const desktop=!!(window.memoboardNative&&window.memoboardNative.available);
   const pct=Math.round((Number((window.MBStore&&StoreService.desktop?StoreService.desktop().windowOpacity:meta.windowOpacity))||1)*100);
@@ -470,8 +524,9 @@ function renderSettings(m){
       '<button data-settings-act="always-on-top" class="'+((window.MBStore&&StoreService.desktop?StoreService.desktop().alwaysOnTop:meta.alwaysOnTop)?'on':'')+'">📍 항상 최상단</button><button data-settings-act="mini-mode" class="'+((window.MBStore&&StoreService.desktop?StoreService.desktop().miniMode:meta.miniMode)?'on':'')+'">🪟 미니 모드</button><button data-settings-act="hide-to-tray">🗕 트레이 숨김</button><button data-settings-act="minimize-to-tray" class="'+((window.MBStore&&StoreService.desktop?StoreService.desktop().minimizeToTray:meta.minimizeToTray)?'on':'')+'">닫기→트레이</button></div>'+
       '<div class="setting-row"><span>투명도</span><input type="range" id="settingsOpacity" min="55" max="100" step="5" value="'+pct+'"><b id="settingsOpacityVal">'+pct+'%</b></div><p>'+(desktop?'데스크톱 창 기능 사용 중':'브라우저 모드에서는 창 기능 일부가 비활성화됩니다')+'</p></section>'+
     '<section class="setting-card"><h3>백업 / 복구</h3>'+backupHealthMarkup()+'<div class="setting-actions"><button data-settings-act="export">JSON 내보내기</button><button data-settings-act="import">JSON 가져오기</button><button data-settings-act="md-export-folder">Markdown 폴더 내보내기</button><button data-settings-act="md-import-folder">Markdown 폴더 가져오기</button><button data-settings-act="autobackup-setup">자동백업 폴더 지정</button><button data-settings-act="autobackup-run">자동백업 지금 실행</button><button data-settings-act="autobackup-snapshot">스냅샷 켜기/끄기</button><button data-settings-act="autobackup-off">자동백업 해제</button><button data-settings-act="restore-center">복구 센터</button></div></section>'+
-    '<section class="setting-card"><h3>공유 작업함</h3><div class="setting-list"><div class="line"><b>현재 모드</b><span>'+(((window.MBStore&&StoreService.workspace?StoreService.workspace():meta.workspace)==='shared'?'공유':'개인'))+'</span></div><div class="line"><b>공유폴더</b><span>'+(window.SharedBoard&&SharedBoard.state.root?esc(SharedBoard.state.root):'미지정')+'</span></div></div><div class="setting-row"><span>표시 이름</span><input id="sharedDisplayName" value="'+escAttr(window.SharedBoard?SharedBoard.author():'익명')+'" placeholder="이름"><button class="softbtn" data-shared-name-save="1">저장</button></div><div class="setting-actions"><button data-workspace="personal">개인 작업함</button><button data-workspace="shared">공유 작업함</button><button data-shared-pick="1">공유폴더 선택/변경</button><button data-shared-refresh="1">공유 새로고침</button></div><p>실행파일은 각자 로컬에 두고, 같은 공유폴더만 바라보면 됩니다. 공유 모드에서는 기존 메모/달력 화면이 공유 데이터 기준으로 동작합니다.</p></section>'+
+    sharedWorkspaceSettingsMarkup()+
     '<section class="setting-card"><h3>메모 / 보기</h3><div class="setting-actions"><button data-settings-act="quick-note">빠른 메모</button><button data-settings-act="template-manager">템플릿 관리자</button><button data-settings-act="notif">알림 권한</button><button data-settings-act="trash">휴지통</button><button data-settings-act="bulk-size" data-size="large">전체 크게</button></div></section>'+
+    markdownBasicsCardMarkup()+
     '<section class="setting-card full"><h3>도움말 / 기능 설명</h3><div class="helpgrid">'+
       '<div class="helpitem"><b>메모</b><span>구역별 카드 보드입니다. 카드의 ⠿ 핸들을 잡고 구역과 순서를 바꿉니다.</span></div>'+ 
       '<div class="helpitem"><b>검색</b><span><code>tag:</code> <code>folder:</code> <code>kind:</code> <code>due:</code> <code>date:</code> <code>title:</code> <code>body:</code> <code>is:</code> 조합 검색을 지원합니다.</span></div>'+ 
@@ -492,4 +547,5 @@ function renderSettings(m){
   m.querySelectorAll('[data-settings-act]').forEach(b=>b.addEventListener('click',()=>executeAppAction(b.dataset.settingsAct,b)));
   const ro=m.querySelector('#settingsOpacity');
   if(ro)ro.addEventListener('input',()=>{const v=Number(ro.value);const out=$('#settingsOpacityVal');if(out)out.textContent=v+'%';DesktopWindowManager.setOpacity(v/100);});
+  if(window.SharedBoard&&SharedBoard.state&&SharedBoard.state.configured&&!SharedBoard.state.health){SharedBoard.inspect(true);}
 }

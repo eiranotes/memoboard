@@ -1,6 +1,6 @@
 [package]
 name = "memoboard"
-version = "1.0.0"
+version = "1.0.1"
 description = "Memoboard Tauri desktop app"
 authors = ["Yomiai"]
 license = "MIT"

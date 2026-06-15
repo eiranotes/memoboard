@@ -169,7 +169,7 @@ $('#side').addEventListener('click',e=>{
     if(act==='quick')QuickMemo.open();
     if(act==='all'){filter={q:'',tag:null,color:null,smart:'all',folder:null,due:null,zone:null,kind:null};const q=$('#q');if(q)q.value='';setView('memo');}
     if(act==='calendar'){if(window.MBStore&&StoreService.setCalMode)StoreService.setCalMode('month');else meta.calMode='month';setView('cal');}
-    if(act==='weekcal'){if(window.MBStore&&StoreService.setCalMode)StoreService.setCalMode('week');else meta.calMode='week';setView('cal');}
+    if(act==='weekcal'){if(window.MBStore&&StoreService.setCalMode)StoreService.setCalMode('week');else meta.calMode='week';calCur=new Date();setView('cal');}
     return;}
   const mode=e.target.closest('[data-mode-action]');
   if(mode){setWorkMode(mode.dataset.modeAction);return;}

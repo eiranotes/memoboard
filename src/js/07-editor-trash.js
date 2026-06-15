@@ -93,6 +93,21 @@ window.MBTemplateManager=TemplateManager;
 
 const QuickMemo={
   open(){
+    // 빠른 메모는 별도 모달보다 메모 보드 상단의 Keep식 빠른 입력을 우선 사용한다.
+    // 다른 화면에서 호출되면 메모 화면으로 전환한 뒤 인라인 입력창을 연다.
+    try{
+      if((window.MBStore&&StoreService.view?StoreService.view():meta.view)!=='memo')setView('memo');
+      const openInline=()=>{
+        const box=$('#quickComposer');
+        if(box){box.click();return true;}
+        return false;
+      };
+      if(openInline())return;
+      setTimeout(()=>{if(!openInline())this.openLegacyModal();},30);
+      return;
+    }catch(e){this.openLegacyModal();}
+  },
+  openLegacyModal(){
     $('#quickTitle').value='';$('#quickBody').value='';$('#quickWrap').classList.add('open');
     setTimeout(()=>$('#quickTitle').focus(),30);
   },
@@ -105,7 +120,7 @@ const QuickMemo={
     const n=newNote({title,body,kind:'memo',size:'normal',zone:0,morder:memoTopOrder(0)});
     notes.push(n);
     await persistNote(n,{skipRender:true});
-    this.close();render();openEditor(n.id,'edit');toast('빠른 메모를 저장했습니다');
+    this.close();render();toast('빠른 메모를 저장했습니다');
   }
 };
 window.MBQuickMemo=QuickMemo;
@@ -170,14 +185,40 @@ const RestoreCenter={
 window.MBRestoreCenter=RestoreCenter;
 
 
-function openEditor(id,mode){
+function editorInputSnapshot(){
+  return {
+    title:$('#edTitle')?$('#edTitle').value:'',body:$('#edText')?$('#edText').value:'',
+    done:$('#edDone')?!!$('#edDone').checked:false,priority:$('#edPriority')?$('#edPriority').value:'normal',
+    kind:$('#edKind')?$('#edKind').value:'memo',date:$('#edDate')?($('#edDate').value||null):null,
+    dueDate:$('#edDue')?($('#edDue').value||null):null,remind:$('#edRemind')?($('#edRemind').value||null):null,
+    folder:$('#edFolder')?$('#edFolder').value.trim():'',tags:$('#edTags')?$('#edTags').value.split(',').map(s=>s.trim().replace(/^#/,'')).filter(Boolean):[],
+    sharedStatus:$('#edSharedStatus')?$('#edSharedStatus').value:'',assignee:$('#edSharedAssignee')?$('#edSharedAssignee').value.trim():''
+  };
+}
+function isEditorDirty(){
+  const n=curNote();if(!n||!edOpenSnap)return false;
+  const s=editorInputSnapshot();
+  const nTags=Array.isArray(n.tags)?n.tags.slice().sort():[];
+  return s.title!==(edOpenSnap.title||'')||s.body!==(edOpenSnap.body||'')||
+    s.done!==!!n.done||s.priority!==(n.priority||'normal')||s.kind!==(n.kind||'memo')||
+    s.date!==(n.date||null)||s.dueDate!==(n.dueDate||null)||s.remind!==(n.remind||null)||
+    s.folder!==(n.folder||'')||JSON.stringify(s.tags.slice().sort())!==JSON.stringify(nTags)||
+    (window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&(s.sharedStatus!==(n._sharedStatus||'open')||s.assignee!==(n.assignee||'')));
+}
+async function openEditor(id,mode){
   let n=notes.find(x=>x.id===id);
-  if(!n){n=newNote();notes.push(n);persistNote(n,{skipRender:true});}
+  if(!n){n=newNote();notes.push(n);await persistNote(n,{skipRender:true});}
   normalizeNote(n);
+  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()){
+    const ok=await SharedBoard.acquireLock(n.id);
+    if(!ok){
+      // 잠금 확보 실패 시 에디터를 열지 않는다. 입력/자동저장 루프가 시작되면 공유폴더에서 경고가 반복된다.
+      return false;
+    }
+  }
   refreshTemplateSelect();
   editing=n.id;
   editConflict=null;
-  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive())SharedBoard.acquireLock(n.id).then(ok=>{if($('#edSaved'))$('#edSaved').textContent=ok?'공유 편집 잠금 확보':'공유 편집 잠금 없음 · 저장 시 충돌 검사';});
   edOpenSnap={title:n.title,body:n.body,updatedAt:n.updatedAt||0,hash:comparableNote(n)};
   edHistSnap={title:n.title,body:n.body,t:Date.now(),len:(n.title||'').length+(n.body||'').length};
   $('#edTitle').value=n.title;
@@ -214,12 +255,15 @@ function renderBacklinks(n){
   const t=n.title.trim();const bl=t?liveNotes().filter(x=>x.id!==n.id&&x.body.includes('[['+t+']]')):[];
   $('#edBacklinks').innerHTML=bl.length?'백링크: '+bl.map(x=>'<a data-id="'+x.id+'">'+esc(dispTitle(x))+'</a>').join(''):'';}
 function renderEdPrev(){const n=curNote();if(!n)return;
-  $('#edPrev').innerHTML=md2html(n.body);
-  $('#edPrev').querySelectorAll('input[data-ti]').forEach(cb=>{
+  const prev=$('#edPrev');
+  if(window.MBMarkdown&&typeof window.MBMarkdown.resetMermaid==='function')window.MBMarkdown.resetMermaid();
+  prev.innerHTML=md2html(n.body);
+  if(window.MBMarkdown&&typeof window.MBMarkdown.hydrate==='function')window.MBMarkdown.hydrate(prev);
+  prev.querySelectorAll('input[data-ti]').forEach(cb=>{
     cb.addEventListener('change',()=>{
       toggleTaskInBody(n,+cb.dataset.ti);
       $('#edText').value=n.body;touch(n,true);renderEdPrev();});});
-  $('#edPrev').querySelectorAll('a.wiki').forEach(a=>{
+  prev.querySelectorAll('a.wiki').forEach(a=>{
     a.addEventListener('click',()=>openWiki(a.dataset.t));});}
 function openWiki(t){
   t=t.trim();
@@ -270,14 +314,23 @@ async function saveEditor(opts){const n=curNote();if(!n)return false;
     if(n._sharedStatus==='done')n.done=true;
     n.assignee=sa?sa.value.trim():'';
   }
+  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive()&&(!SharedBoard.hasEditLock||!SharedBoard.hasEditLock(n.id))){
+    $('#edSaved').textContent='공유 편집 잠금 없음 · 저장하지 않음';
+    if(opts.manual)toast('다른 사용자가 편집 중인 메모는 저장할 수 없습니다. 취소로 닫으세요');
+    return false;
+  }
   const conflict=await SyncService.checkEditConflict(n,edOpenSnap,opts.force);
   if(conflict){
     editConflict={id:n.id,latest:conflict};
-    $('#edSaved').textContent='충돌 감지 · 저장 보류';
+    $('#edSaved').textContent=opts.manual?'충돌 감지 · 저장 보류':'충돌 감지 · 자동저장 일시정지';
+    if(opts.manual){
+      const yes=await MBDialog.confirm('공유폴더/다른 탭의 최신 수정과 충돌합니다. 현재 에디터 내용을 강제로 저장할까요?',{title:'저장 충돌',okText:'강제저장',cancelText:'취소',danger:false,icon:'⚠️'});
+      return yes?saveEditor(Object.assign({},opts,{force:true})):false;
+    }
     const now=Date.now();
-    if(now-editConflictToastAt>5000){
+    if(now-editConflictToastAt>30000){
       editConflictToastAt=now;
-      toast('다른 탭의 최신 수정과 충돌합니다. 현재 내용을 강제 저장할 수 있습니다',()=>saveEditor({force:true}),'강제저장');
+      toast('외부 수정과 충돌하여 자동저장을 멈췄습니다. 저장 버튼에서 처리하세요');
     }
     return false;
   }
@@ -293,8 +346,8 @@ async function closeEditor(opts){
   if(n){
     let ok=true;
     if(!opts.skipSave){
-      ok=await saveEditor();
-      if(!ok){toast('저장되지 않아 에디터를 닫지 않았습니다');return;}
+      ok=await saveEditor({manual:true});
+      if(!ok){toast('저장되지 않아 에디터를 닫지 않았습니다. 저장하지 않으려면 취소를 누르세요');return;}
     }
     if(edHistSnap&&pushHistorySnapshot(n,edHistSnap))await StorageService.putNote(n);
     if(ok&&!n.title.trim()&&!n.body.trim()&&!n.date&&!n.dueDate){
@@ -303,7 +356,36 @@ async function closeEditor(opts){
   if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive())await SharedBoard.releaseLock(editing);
   editing=null;edOpenSnap=null;edHistSnap=null;editConflict=null;
   $('#edWrap').classList.remove('open');render();}
+async function cancelEditor(){
+  clearTimeout(edSaveTimer);
+  const n=curNote();
+  if(n&&isEditorDirty()){
+    const ok=await MBDialog.confirm('저장하지 않고 에디터를 닫을까요?\n현재 입력 중인 내용은 버립니다.',{title:'편집 취소',okText:'닫기',cancelText:'계속 편집',danger:false,icon:'↩'});
+    if(!ok)return false;
+  }
+  if(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive())await SharedBoard.releaseLock(editing);
+  // 입력 폼만 버린다. notes 배열은 열기 전 메모 객체를 유지하므로 공유 자동동기화와 충돌하지 않는다.
+  editing=null;edOpenSnap=null;edHistSnap=null;editConflict=null;
+  $('#edWrap').classList.remove('open');
+  render();
+  return true;
+}
+function sharedEditingActive(){return !!(window.SharedBoard&&SharedBoard.isActive&&SharedBoard.isActive());}
+function markEditorDirty(){
+  const n=curNote();
+  if(!n)return;
+  $('#edSaved').textContent=sharedEditingActive()?'편집 중 · 저장 전':'편집 중';
+}
 function edInput(){clearTimeout(edSaveTimer);
+  if(sharedEditingActive()){
+    markEditorDirty();
+    // 공유 작업함은 입력 중 자동저장을 하지 않는다. 저장/완료를 눌렀을 때만 공유폴더에 쓴다.
+    edSaveTimer=setTimeout(()=>{
+      if($('#edBox').classList.contains('m-split'))renderEdPrev();
+      updCount();
+    },250);
+    return;
+  }
   edSaveTimer=setTimeout(()=>{saveEditor();
     if($('#edBox').classList.contains('m-split'))renderEdPrev();
     updCount();},500);}
@@ -328,7 +410,11 @@ function focusEditorBodyAtEnd(){
 /* editor events */
 $('#edTitle').addEventListener('input',edInput);
 $('#edText').addEventListener('input',edInput);
-['edDone','edPriority','edKind','edDate','edDue','edRemind','edFolder','edTags','edSharedStatus','edSharedAssignee'].forEach(id=>$('#'+id).addEventListener('change',()=>saveEditor()));
+function edMetaChange(){
+  if(sharedEditingActive()){markEditorDirty();renderEdPrev();updCount();return;}
+  saveEditor();
+}
+['edDone','edPriority','edKind','edDate','edDue','edRemind','edFolder','edTags','edSharedStatus','edSharedAssignee'].forEach(id=>$('#'+id).addEventListener('change',edMetaChange));
 $('#edText').addEventListener('keydown',e=>{
   if(window.MBMarkdown&&window.MBMarkdown.shortcuts&&window.MBMarkdown.shortcuts.handle(e))return;
   if(e.key==='Tab'){e.preventDefault();
@@ -347,9 +433,10 @@ $('#edArchive').onclick=()=>{const n=curNote();n.archived=!n.archived;touch(n,tr
 $('#edDel').onclick=()=>{const n=curNote();if(n.locked){toast('잠금 메모입니다. 먼저 잠금을 해제하세요');return;}n.deletedAt=Date.now();touch(n,true).then(()=>{editing=null;$('#edWrap').classList.remove('open');render();});
   toast('휴지통으로 이동했습니다',()=>{n.deletedAt=null;touch(n);});};
 $('#edWide').onclick=()=>{const wide=window.MBStore&&StoreService.toggleEditorWide?StoreService.toggleEditorWide():!(meta.editorWide);if(!(window.MBStore&&StoreService.toggleEditorWide))meta.editorWide=wide;metaSave({silent:true});$('#edBox').classList.toggle('wide',!!wide);$('#edWide').classList.toggle('on',!!wide);toast(wide?'장문 편집 영역을 넓혔습니다':'기본 편집 크기로 돌아왔습니다');};
+$('#edCancelBtn').onclick=()=>cancelEditor();
 $('#edSaveBtn').onclick=()=>saveEditorManual(false);
 $('#edDoneBtn').onclick=()=>saveEditorManual(true);
-$('#edClose').onclick=()=>saveEditorManual(true);
+$('#edClose').onclick=()=>cancelEditor();
 $('#edPrev').addEventListener('click',e=>{
   if(e.target.closest('a,input,button,select,textarea,label'))return;
   if(!$('#edBox').classList.contains('m-split'))focusEditorBodyAtEnd();
@@ -388,7 +475,7 @@ $('#edMoreMenu').addEventListener('click',async e=>{
   if(b.dataset.act==='copymd')navigator.clipboard.writeText('# '+dispTitle(n)+'\n\n'+n.body).then(()=>toast('마크다운을 복사했습니다'));
   if(b.dataset.act==='copyhtml')navigator.clipboard.writeText('<h1>'+esc(dispTitle(n))+'</h1>'+md2html(n.body)).then(()=>toast('HTML을 복사했습니다'));
   $('#edMoreMenu').classList.remove('open');});
-const EditorService={open:openEditor,save:saveEditor,close:closeEditor};
+const EditorService={open:openEditor,save:saveEditor,close:closeEditor,cancel:cancelEditor};
 window.MBEditor=EditorService;
 
 function setNoteSize(n,size,skipRender){

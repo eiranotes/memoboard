@@ -100,10 +100,36 @@ const DesktopWindowManager=(()=>{
     if(native()&&window.memoboardNative.setMiniMode){try{await window.memoboardNative.setMiniMode(meta.miniMode);}catch(e){toast('미니 모드 전환 실패');}}
     toast(meta.miniMode?'미니 플로팅 모드':'일반 창 모드');
   }
+  function isWindowDragTarget(event){
+    if(!event||event.button!==0)return false;
+    const target=event.target&&event.target.closest?event.target:null;
+    if(!target)return false;
+    if(target.closest('button,input,select,textarea,a,label,[role="button"],.tabs,.workspace-switch,.searchwrap,.dd,.win-controls,[data-no-window-drag]'))return false;
+    return !!target.closest('header,.window-drag-region');
+  }
+  function bindWindowDragRegion(){
+    const header=document.querySelector('header');
+    if(!header||header.dataset.windowDragBound==='1')return;
+    header.dataset.windowDragBound='1';
+    header.addEventListener('mousedown',event=>{
+      if(!isWindowDragTarget(event))return;
+      event.preventDefault();
+      if(event.detail===2){
+        if(window.memoboardNative&&window.memoboardNative.toggleMaximizeWindow){
+          window.memoboardNative.toggleMaximizeWindow().then(setState).catch(()=>{});
+        }
+        return;
+      }
+      if(window.memoboardNative&&window.memoboardNative.startWindowDrag){
+        window.memoboardNative.startWindowDrag().catch(()=>{});
+      }
+    });
+  }
   function init(){
     if(!native())return;
     document.body.classList.add('desktop-runtime');
     document.documentElement.classList.add('desktop-runtime');
+    bindWindowDragRegion();
     bind('#winMin',()=>window.memoboardNative.minimizeWindow());
     bind('#winMax',async()=>{const r=await window.memoboardNative.toggleMaximizeWindow();setState(r);});
     bind('#winClose',()=>window.memoboardNative.closeWindow());
@@ -437,7 +463,7 @@ function inlineMd(s){
 }
 function parseTableRow(line){return line.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(c=>c.trim());}
 function isTableDivider(line){return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);}
-function md2html(src){
+function legacyMd2Html(src){
   const fences=[];
   src=String(src||'').replace(/```([^\n`]*)\n([\s\S]*?)(?:```|$)/g,(m,lang,code)=>{
     fences.push({lang:String(lang||'').trim(),code});
@@ -450,8 +476,12 @@ function md2html(src){
     const fm=L.match(/^\u0001F(\d+)\u0001\s*$/);
     if(fm){
       const f=fences[+fm[1]]||{lang:'',code:''};
-      const lang=f.lang?'<div class="code-lang">'+esc(f.lang)+'</div>':'';
-      out+='<pre>'+lang+'<code class="hl">'+hl(f.code)+'</code></pre>';i++;continue;
+      if(String(f.lang||'').toLowerCase()==='mermaid')out+=mermaidPlaceholder(f.code);
+      else {
+        const lang=f.lang?'<div class="code-lang">'+esc(f.lang)+'</div>':'';
+        out+='<pre>'+lang+'<code class="hl">'+hl(f.code)+'</code></pre>';
+      }
+      i++;continue;
     }
     if(/^\s*$/.test(L)){i++;continue;}
     let m;
@@ -473,16 +503,30 @@ function md2html(src){
     if(/^\s*([-*]|\d+\.)\s+/.test(L)){
       const ordered=/^\s*\d+\.\s+/.test(L);
       let items='';
-      while(i<lines.length&&/^\s*([-*]|\d+\.)\s+/.test(lines[i])){
+      let expectedNo=null;
+      const firstNo=ordered?Number((L.match(/^\s*(\d+)\.\s+/)||[])[1]||1):null;
+      while(i<lines.length){
         const ln=lines[i];
-        const tm=ln.match(/^\s*(?:[-*]|\d+\.)\s+\[( |x|X)\]\s*(.*)/);
+        const om=ordered?ln.match(/^\s*(\d+)\.\s+(.*)/):null;
+        const um=!ordered?ln.match(/^\s*([-*])\s+(.*)/):null;
+        if((ordered&&!om)||(!ordered&&!um))break;
+        const rawText=ordered?om[2]:um[2];
+        let liAttr='';
+        if(ordered){
+          const no=Number(om[1]);
+          if(expectedNo===null)expectedNo=no;
+          if(no!==expectedNo)liAttr+=' value="'+no+'"';
+          expectedNo=no+1;
+        }
+        const tm=rawText.match(/^\[( |x|X)\]\s*(.*)/);
         if(tm){const done=tm[1]!==' ';
-          items+='<li class="task'+(done?' done':'')+'"><input type="checkbox" data-ti="'+taskIdx+'"'+(done?' checked':'')+'><span>'+inlineMd(tm[2]||'체크 항목')+'</span></li>';
+          items+='<li'+liAttr+' class="task'+(done?' done':'')+'"><input type="checkbox" data-ti="'+taskIdx+'"'+(done?' checked':'')+'><span>'+inlineMd(tm[2]||'체크 항목')+'</span></li>';
           taskIdx++;
-        }else items+='<li>'+inlineMd(ln.replace(/^\s*([-*]|\d+\.)\s+/,''))+'</li>';
+        }else items+='<li'+liAttr+'>'+inlineMd(rawText)+'</li>';
         i++;
       }
-      out+=(ordered?'<ol>':'<ul>')+items+(ordered?'</ol>':'</ul>');continue;
+      const startAttr=ordered&&firstNo&&firstNo!==1?' start="'+firstNo+'"':'';
+      out+=(ordered?'<ol'+startAttr+'>':'<ul>')+items+(ordered?'</ol>':'</ul>');continue;
     }
     let p='';
     while(i<lines.length&&lines[i].trim()&&!/^(#{1,6}\s|>|\s*\||\s*([-*]|\d+\.)\s|\u0001F)/.test(lines[i])&&!/^\s*(-{3,}|\*{3,})\s*$/.test(lines[i])){
@@ -491,6 +535,173 @@ function md2html(src){
     if(p)out+='<p>'+p.replace(/<br>$/,'')+'</p>';else i++;
   }
   return out||'<p style="color:var(--sub)">미리볼 내용이 없습니다.</p>';
+}
+
+let markdownItRenderer=null;
+let mermaidSeq=0;
+let mermaidInitialized=false;
+let mermaidRenderToken=0;
+function mermaidPlaceholder(src){
+  return '<div class="mermaid-block" data-mermaid-status="pending"><pre class="mermaid-source"><div class="code-lang">mermaid</div><code class="language-mermaid">'+esc(src||'')+'</code></pre></div>';
+}
+function getMermaidRenderer(){
+  const m=window.mermaid;
+  if(!m||typeof m.render!=='function')return null;
+  if(!mermaidInitialized&&typeof m.initialize==='function'){
+    try{
+      m.initialize({startOnLoad:false,securityLevel:'strict',theme:'default',logLevel:'fatal'});
+      mermaidInitialized=true;
+    }catch(e){console.warn('[memoboard] mermaid init failed',e);return null;}
+  }
+  return m;
+}
+function mermaidUnavailable(block){
+  if(!block||block.dataset.mermaidStatus==='unavailable')return;
+  block.dataset.mermaidStatus='unavailable';
+  block.insertAdjacentHTML('afterbegin','<div class="mermaid-note">Mermaid 렌더러를 불러오지 못했습니다.</div>');
+}
+async function renderMermaidIn(root){
+  root=root||document;
+  const m=getMermaidRenderer();
+  const blocks=[...root.querySelectorAll('.mermaid-block')].filter(x=>x.dataset.mermaidStatus!=='rendered'&&x.dataset.mermaidStatus!=='rendering');
+  if(!blocks.length)return;
+  if(!m){blocks.forEach(mermaidUnavailable);return;}
+  const token=++mermaidRenderToken;
+  for(const block of blocks){
+    const code=block.querySelector('code.language-mermaid');
+    const src=code?code.textContent:'';
+    if(!src.trim()){block.dataset.mermaidStatus='empty';continue;}
+    block.dataset.mermaidStatus='rendering';
+    try{
+      const id='mb_mermaid_'+Date.now().toString(36)+'_'+(mermaidSeq++);
+      const res=await m.render(id,src);
+      if(token!==mermaidRenderToken||!document.body.contains(block))continue;
+      const svg=typeof res==='string'?res:(res&&res.svg)||'';
+      if(!svg)throw new Error('Mermaid rendered an empty SVG');
+      block.innerHTML='<div class="mermaid-diagram">'+svg+'</div>';
+      block.dataset.mermaidStatus='rendered';
+      if(res&&typeof res.bindFunctions==='function')res.bindFunctions(block);
+    }catch(e){
+      const msg=esc((e&&e.message)||String(e)||'Mermaid render failed');
+      block.dataset.mermaidStatus='error';
+      block.innerHTML='<div class="mermaid-error">Mermaid 문법 오류: '+msg+'</div><pre class="mermaid-source"><div class="code-lang">mermaid</div><code class="language-mermaid">'+esc(src)+'</code></pre>';
+    }
+  }
+}
+function hydrateMarkdownPreview(root){
+  if(!root)return;
+  renderMermaidIn(root);
+}
+function resetMermaidRender(){mermaidRenderToken++;}
+function getMarkdownItRenderer(){
+  if(markdownItRenderer!==null)return markdownItRenderer||null;
+  const factory=window.markdownit||window.MarkdownIt||window.markdownIt;
+  if(typeof factory!=='function'){markdownItRenderer=false;return null;}
+  try{
+    const md=factory({html:false,linkify:true,typographer:false,breaks:false});
+    md.validateLink=function(url){return !!safeLinkTarget(url);};
+    md.renderer.rules.link_open=function(tokens,idx,options,env,self){
+      const token=tokens[idx];
+      const hrefIdx=token.attrIndex('href');
+      if(hrefIdx>=0){
+        const safe=safeLinkTarget(token.attrs[hrefIdx][1]);
+        if(safe)token.attrs[hrefIdx][1]=safe;
+      }
+      token.attrSet('target','_blank');
+      token.attrSet('rel','noopener noreferrer');
+      return self.renderToken(tokens,idx,options);
+    };
+    md.renderer.rules.fence=function(tokens,idx){
+      const token=tokens[idx];
+      const info=String(token.info||'').trim();
+      const lang=(info.split(/\s+/)[0]||'').toLowerCase();
+      if(lang==='mermaid')return mermaidPlaceholder(token.content||'');
+      const label=lang?'<div class="code-lang">'+esc(lang)+'</div>':'';
+      const cls=lang?' language-'+escAttr(lang):'';
+      return '<pre>'+label+'<code class="hl'+cls+'">'+hl(token.content||'')+'</code></pre>';
+    };
+    md.renderer.rules.code_block=function(tokens,idx){
+      return '<pre><code class="hl">'+hl(tokens[idx].content||'')+'</code></pre>';
+    };
+    markdownItRenderer=md;
+    return markdownItRenderer;
+  }catch(e){console.warn('[memoboard] markdown-it init failed; fallback renderer will be used',e);markdownItRenderer=false;return null;}
+}
+function transformOutsideCode(html,fn){
+  const kept=[];
+  html=String(html||'').replace(/<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>/gi,m=>{
+    kept.push(m);
+    return '\u0003K'+(kept.length-1)+'\u0003';
+  });
+  html=fn(html);
+  return html.replace(/\u0003K(\d+)\u0003/g,(m,i)=>kept[+i]||'');
+}
+function enhanceMarkdownHtml(html){
+  let taskIdx=0;
+  html=String(html||'').replace(/<li>\s*<p>\[( |x|X)\]\s*([\s\S]*?)<\/p>\s*<\/li>/g,(m,mark,body)=>{
+    const done=mark!==' ';
+    return '<li class="task'+(done?' done':'')+'"><input type="checkbox" data-ti="'+(taskIdx++)+'"'+(done?' checked':'')+'><span>'+body+'</span></li>';
+  });
+  html=html.replace(/<li>\s*\[( |x|X)\]\s*([\s\S]*?)<\/li>/g,(m,mark,body)=>{
+    const done=mark!==' ';
+    return '<li class="task'+(done?' done':'')+'"><input type="checkbox" data-ti="'+(taskIdx++)+'"'+(done?' checked':'')+'><span>'+body+'</span></li>';
+  });
+  return transformOutsideCode(html,body=>body
+    .replace(/\[\[([^\]<>\n]+)\]\]/g,(m,t)=>'<a class="wiki" data-t="'+escAttr(t)+'">'+esc(t)+'</a>')
+    .replace(/==([^=<>\n]+)==/g,'<mark>$1</mark>')
+    .replace(/(^|[\s>])#([0-9A-Za-z가-힣_\-]+)/g,'$1<span class="htag">#$2</span>')
+  );
+}
+function orderedNumberRuns(src){
+  const runs=[];
+  const lines=String(src||'').split(/\r?\n/);
+  let inFence=false,current=null;
+  for(const line of lines){
+    if(/^```/.test(line.trim())){inFence=!inFence;current=null;continue;}
+    if(inFence)continue;
+    const m=line.match(/^\s{0,3}(\d+)\.\s+/);
+    if(m){
+      if(!current){current=[];runs.push(current);}
+      current.push(Number(m[1]));
+    }else if(line.trim()===''){
+      continue;
+    }else current=null;
+  }
+  return runs.filter(r=>r.length);
+}
+function restoreOrderedListValues(src,html){
+  const runs=orderedNumberRuns(src);
+  if(!runs.length)return html;
+  let runIdx=0;
+  return String(html||'').replace(/<ol([^>]*)>([\s\S]*?)<\/ol>/g,(m,attrs,body)=>{
+    const nums=runs[runIdx++];
+    if(!nums||!nums.length)return m;
+    if(nums[0]!==1&&!/\sstart=/.test(attrs))attrs+=' start="'+nums[0]+'"';
+    let i=0,expected=nums[0];
+    body=body.replace(/<li(?![^>]*\svalue=)([^>]*)>/g,(lm,liAttrs)=>{
+      const no=nums[i++];
+      let extra='';
+      if(Number.isFinite(no)&&no!==expected)extra=' value="'+no+'"';
+      expected=Number.isFinite(no)?no+1:expected+1;
+      return '<li'+extra+liAttrs+'>';
+    });
+    return '<ol'+attrs+'>'+body+'</ol>';
+  });
+}
+function markdownItHtml(src){
+  const md=getMarkdownItRenderer();
+  if(!md)return null;
+  let html=md.render(String(src||''));
+  html=restoreOrderedListValues(src,html);
+  html=enhanceMarkdownHtml(html).trim();
+  return html||'<p style="color:var(--sub)">미리볼 내용이 없습니다.</p>';
+}
+function md2html(src){
+  try{
+    const html=markdownItHtml(src);
+    if(html!==null)return html;
+  }catch(e){console.warn('[memoboard] markdown-it render failed; fallback renderer will be used',e);}
+  return legacyMd2Html(src);
 }
 function renderMarkdownPreview(src){return md2html(src);}
 function toggleTaskInBody(n,k){
@@ -570,4 +781,13 @@ const MarkdownShortcuts=(()=>{
   }
   return {handle,help:MARKDOWN_HELP};
 })();
-window.MBMarkdown={render:renderMarkdownPreview,shortcuts:MarkdownShortcuts,help:MARKDOWN_HELP};
+window.MBMarkdown=Object.assign(window.MBMarkdown||{}, {
+  render:renderMarkdownPreview,
+  hydrate:hydrateMarkdownPreview,
+  renderMermaidIn:renderMermaidIn,
+  resetMermaid:resetMermaidRender,
+  shortcuts:MarkdownShortcuts,
+  help:MARKDOWN_HELP,
+  engine:()=>getMarkdownItRenderer()?'markdown-it':'legacy-fallback',
+  mermaid:()=>getMermaidRenderer()?'mermaid':'unavailable'
+});

@@ -22,9 +22,12 @@ if (!cssFiles.length) fail('Renderer CSS module files missing');
 if (/<style[\s>]/i.test(html)) fail('Inline style block remains; use src/css/*.css');
 if (/<script>([\s\S]*?)<\/script>/i.test(html)) fail('Inline script remains; use src/js/*.js');
 const scriptSrcs = [...html.matchAll(/<script[^>]+src="([^"]+)"/gi)].map(m=>m[1]);
+if (!scriptSrcs.includes('./vendor/markdown-it.min.js')) fail('markdown-it vendor script must be loaded before markdown utils');
+if (!scriptSrcs.includes('./vendor/mermaid.min.js')) fail('mermaid vendor script must be loaded before markdown utils');
+if (scriptSrcs.indexOf('./vendor/mermaid.min.js') > scriptSrcs.indexOf('./js/04-utils-markdown.js')) fail('mermaid vendor must load before markdown utilities');
 for (const src of scriptSrcs) {
   if (/^(https?:)?\/\//i.test(src)) fail('External script reference: ' + src);
-  if (!src.startsWith('./js/')) fail('Unexpected script path: ' + src);
+  if (!src.startsWith('./js/') && !src.startsWith('./vendor/')) fail('Unexpected script path: ' + src);
 }
 const cssHrefs = [...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/gi)].map(m=>m[1]);
 for (const href of cssHrefs) {
@@ -38,15 +41,36 @@ if (dupIds.length) fail('Duplicate static HTML id: ' + dupIds.join(', '));
 const sourceBlob = [html, mainRs].concat(jsFiles.map(x=>x[1]), cssFiles.map(x=>x[1])).join('\n');
 for (const re of [/local\.adguard/i, /AdGuard/i, /https?:\/\//i]) if (re.test(sourceBlob)) fail('Forbidden external/injected reference: ' + re);
 if (/window\.confirm\(/.test(sourceBlob)) fail('Native window.confirm fallback remains');
+for (const token of ['USERNAME','userName','osUser','std::env::var(\"USER\")',"std::env::var('USER')"]) {
+  if (sourceBlob.includes(token)) fail('OS account name fallback must not be used for shared identity: ' + token);
+}
 for (const re of [/\balert\(/, /\bprompt\(/]) {
   if (re.test(sourceBlob)) fail('Native dialog found: ' + re);
 }
 if (!tauriConf.app || tauriConf.app.withGlobalTauri !== true) fail('Tauri app.withGlobalTauri must be true');
+if (!tauriConf.app.security || !tauriConf.app.security.csp || !/default-src 'self'/.test(tauriConf.app.security.csp)) fail('Tauri CSP must be enabled for the local renderer');
 if (!tauriConf.app.windows || tauriConf.app.windows[0].decorations !== false) fail('Tauri window must be frameless/decorations:false');
 if (tauriConf.build.frontendDist !== '../src') fail('Tauri frontendDist must be ../src');
-if (pkg.version !== '1.0.0') fail('package version mismatch: ' + pkg.version);
+if (pkg.version !== '1.0.1') fail('package version mismatch: ' + pkg.version);
 if (tauriConf.version !== pkg.version) fail('tauri.conf version mismatch');
+
+if (/data-tauri-drag-region/.test(html)) fail('Do not combine data-tauri-drag-region with custom Rust window_start_drag; use one drag path only');
+if (/-webkit-app-region/.test(sourceBlob) || /\bapp-region\s*:/.test(sourceBlob)) fail('Legacy app-region CSS should not be used with the custom drag command');
+if (!/header\.addEventListener\('mousedown'/.test(sourceBlob)) fail('Window drag should use mousedown so double-click can be branched before dragging');
+if (/header\.addEventListener\('pointerdown'/.test(sourceBlob)) fail('Window drag pointerdown handler can consume double-click maximize; use mousedown with event.detail');
 if (!/window\.memoboardNative\s*=\s*Object\.freeze/.test(sourceBlob)) fail('Tauri native bridge not found');
+if (!/MBCalendarDraft/.test(sourceBlob)) fail('Calendar quick-input draft guard missing');
+if (!/uiDraftActive\(\)/.test(sourceBlob)) fail('Shared sync UI draft guard missing');
+if (/quickComposer[\s\S]{0,2600}openEditor\(n\.id/.test(sourceBlob)) fail('Inline quick composer must not open editor after save');
+if (!/fn\s+replace_json_file\s*\(/.test(mainRs)) fail('replace_json_file helper missing');
+if (!/MoveFileExW/.test(mainRs) || !/MOVEFILE_REPLACE_EXISTING/.test(mainRs)) fail('Windows JSON writes must replace existing files via MoveFileExW');
+if (/Command::new\("cmd"\)\.args\(\["\/C",\s*"start"/.test(mainRs)) fail('open_path must not shell through cmd /C start');
+{
+  const pickIdx = mainRs.indexOf('fn pick_shared_dir');
+  const errIdx = mainRs.indexOf('Shared display name is required', pickIdx);
+  const dialogIdx = mainRs.indexOf('pick_folder()', pickIdx);
+  if (pickIdx < 0 || errIdx < 0 || dialogIdx < 0 || errIdx > dialogIdx) fail('pick_shared_dir must validate display name before opening/writing a shared folder');
+}
 if (!/tauri::generate_handler!/.test(mainRs)) fail('Tauri invoke handler not found');
 if (/layoutBtn/.test(sourceBlob)) fail('Removed layoutBtn reference remains');
 if (/moveDragElement|memoLastDropSig/.test(sourceBlob)) fail('Removed drag legacy remains');

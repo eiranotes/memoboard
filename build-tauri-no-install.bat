@@ -16,8 +16,8 @@ if exist "src-tauri\Cargo.lock" (
 )
 call npm run tauri:build || goto :err
 if not exist dist mkdir dist
-if exist "src-tauri\target\release\memoboard.exe" copy /Y "src-tauri\target\release\memoboard.exe" "dist\Memoboard-Tauri-1.0.0.exe" >nul
-if exist "dist\Memoboard-Tauri-1.0.0.exe" echo Output: dist\Memoboard-Tauri-1.0.0.exe
+if exist "src-tauri\target\release\memoboard.exe" copy /Y "src-tauri\target\release\memoboard.exe" "dist\Memoboard-Tauri-1.0.1.exe" >nul
+if exist "dist\Memoboard-Tauri-1.0.1.exe" echo Output: dist\Memoboard-Tauri-1.0.1.exe
 pause
 exit /b 0
 :err

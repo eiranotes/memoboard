@@ -1,5 +1,53 @@
 'use strict';
 /* ================= calendar ================= */
+
+const CalendarQuickDraft=(function(){
+  const drafts=new Map();
+  function readKind(box){const sel=box&&box.querySelector?box.querySelector('.dkind'):null;return sel?sel.value:'task';}
+  function set(date,text,kind){
+    if(!date)return;
+    text=String(text||'');kind=kind||'task';
+    if(text.trim())drafts.set(date,{text,kind,at:Date.now()});
+    else drafts.delete(date);
+  }
+  function capture(root){
+    (root||document).querySelectorAll&& (root||document).querySelectorAll('.dquick').forEach(box=>{
+      const inp=box.querySelector('.dadd');
+      if(inp&&inp.value) set(box.dataset.d,inp.value,readKind(box));
+    });
+  }
+  function restore(root){
+    if(!root||!root.querySelectorAll)return;
+    root.querySelectorAll('.dquick').forEach(box=>{
+      const d=box.dataset.d, draft=drafts.get(d);
+      if(!draft)return;
+      const inp=box.querySelector('.dadd'), sel=box.querySelector('.dkind'), cell=box.closest('.dcell');
+      if(sel)sel.value=draft.kind||'task';
+      if(inp)inp.value=draft.text||'';
+      if(cell)cell.classList.add('adding');
+    });
+  }
+  function clear(date){if(date)drafts.delete(date);else drafts.clear();}
+  function isActive(){
+    const ae=document.activeElement;
+    if(ae&&ae.closest&&ae.closest('.dquick'))return true;
+    for(const inp of document.querySelectorAll('.dadd')){if((inp.value||'').trim())return true;}
+    return drafts.size>0;
+  }
+  function bind(root){
+    (root||document).querySelectorAll&& (root||document).querySelectorAll('.dquick').forEach(box=>{
+      const inp=box.querySelector('.dadd'), sel=box.querySelector('.dkind');
+      if(!inp)return;
+      const update=()=>set(box.dataset.d,inp.value,sel?sel.value:'task');
+      inp.addEventListener('input',update);
+      inp.addEventListener('focus',update);
+      if(sel)sel.addEventListener('change',update);
+    });
+  }
+  return {capture,restore,bind,set,clear,isActive};
+})();
+window.MBCalendarDraft=CalendarQuickDraft;
+
 function weekRange(){
   const start=weekStart(calCur), end=new Date(start);end.setDate(start.getDate()+6);
   return {start,end,startKey:ymd(start),endKey:ymd(end),label:fmtMd(start)+' - '+fmtMd(end)};
@@ -89,12 +137,14 @@ function renderCal(m){
     if(ents.length>MAX)h+='<div class="dmore">+'+(ents.length-MAX)+'개 더</div>';
     h+='<div class="dquick" data-d="'+k+'"><select class="dkind">'+kindOptions('task')+'</select><input class="dadd" placeholder="입력 후 Enter" data-d="'+k+'"></div></div>';}
   h+='</div>'+(!monthMode?weekBottomHtml():'')+'</div>';
+  if(window.MBCalendarDraft)MBCalendarDraft.capture(m);
   m.innerHTML=h;
+  if(window.MBCalendarDraft){MBCalendarDraft.restore(m);MBCalendarDraft.bind(m);}
   $('#calPrev').onclick=()=>{if(monthMode){calCur.setMonth(calCur.getMonth()-1);}else{calCur.setDate(calCur.getDate()-7);}render();};
   $('#calNext').onclick=()=>{if(monthMode){calCur.setMonth(calCur.getMonth()+1);}else{calCur.setDate(calCur.getDate()+7);}render();};
   $('#calToday').onclick=()=>{calCur=new Date();if((window.MBStore&&StoreService.calMode?StoreService.calMode():meta.calMode)==='month')calCur.setDate(1);render();};
   $('#calMonth').onclick=()=>{if(window.MBStore&&StoreService.setCalMode)StoreService.setCalMode('month');else meta.calMode='month';calCur.setDate(1);metaSave();render();};
-  $('#calWeek').onclick=()=>{if(window.MBStore&&StoreService.setCalMode)StoreService.setCalMode('week');else meta.calMode='week';calCur=new Date(calCur.getFullYear(),calCur.getMonth(),Math.max(1,calCur.getDate()));metaSave();render();};
+  $('#calWeek').onclick=()=>{if(window.MBStore&&StoreService.setCalMode)StoreService.setCalMode('week');else meta.calMode='week';calCur=new Date();metaSave();render();};
   m.querySelectorAll('.dcell').forEach(cell=>{
     cell.addEventListener('click',e=>{
       if(e.target.closest('.dent')||e.target.closest('.dquick'))return;
@@ -119,13 +169,20 @@ function renderCal(m){
   m.querySelectorAll('.dadd').forEach(inp=>{
     inp.addEventListener('keydown',e=>{
       if(e.key==='Enter'&&inp.value.trim()){
+        e.preventDefault();
         const kind=inp.closest('.dquick').querySelector('.dkind').value;
         const due=['task','deadline','report'].includes(kind)?inp.dataset.d:null;
         const n=newNote({title:inp.value.trim(),date:inp.dataset.d,dueDate:due,kind});
-        notes.push(n);persistNote(n,{skipRender:true}).then(()=>{render();openEditor(n.id,'edit');});
-        const c=$('#main').querySelector('.dcell[data-d="'+inp.dataset.d+'"]');
-        if(c){c.classList.add('adding');c.querySelector('.dadd').focus();}}
-      if(e.key==='Escape'){inp.value='';inp.closest('.dcell').classList.remove('adding');e.stopPropagation();}});});
+        notes.push(n);
+        const dateKey=inp.dataset.d;
+        if(window.MBCalendarDraft)MBCalendarDraft.clear(dateKey);
+        persistNote(n,{skipRender:true}).then(()=>{
+          render();
+          const c=$('#main').querySelector('.dcell[data-d="'+dateKey+'"]');
+          if(c){c.classList.add('adding');const next=c.querySelector('.dadd');if(next)next.focus();}
+          toast('달력 메모를 추가했습니다');
+        });}
+      if(e.key==='Escape'){if(window.MBCalendarDraft)MBCalendarDraft.clear(inp.dataset.d);inp.value='';inp.closest('.dcell').classList.remove('adding');e.stopPropagation();}});});
   m.querySelectorAll('.dent input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('click',e=>e.stopPropagation());
     cb.addEventListener('change',()=>{

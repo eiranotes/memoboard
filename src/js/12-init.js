@@ -11,7 +11,10 @@ async function init(){
   await BackupManager.init();
   if(window.SharedBoard)await SharedBoard.init();
   if((window.MBStore&&StoreService.workspace?StoreService.workspace():meta.workspace)==='shared'&&window.SharedBoard){
-    if(SharedBoard.state.configured){await SharedBoard.refresh(true);notes=SharedBoard.currentNotes();}
+    if(!SharedBoard.displayName()){
+      if(window.MBStore&&StoreService.setWorkspace)StoreService.setWorkspace('personal');else meta.workspace='personal';
+      await metaSave({silent:true});
+    }else if(SharedBoard.state.configured){await SharedBoard.refresh(true);notes=SharedBoard.currentNotes();}
     else {if(window.MBStore&&StoreService.setWorkspace)StoreService.setWorkspace('personal');else meta.workspace='personal';await metaSave({silent:true});}
   }
   /* purge trash > 30d */

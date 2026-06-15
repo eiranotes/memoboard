@@ -4,7 +4,7 @@ const APP_SCHEMA_VERSION=17, STORE_SCHEMA_VERSION=17, BACKUP_FORMAT_VERSION=17;
 let notes=[];
 let meta={theme:'light',view:'memo',defaultSize:'title',memoZones:['수집','진행','검토','참고','완료'],collapsedZones:[false,false,false,false,false],sidebarCollapsed:{},sidebarOrder:['work','zone','due','kind','smart','folder','tag','color'],calMode:'month',schemaVersion:APP_SCHEMA_VERSION,weeklyNotes:{},lastBackupAt:0,lastBackupNudgeAt:0,changeCountSinceBackup:0,lastChangedAt:0,autoBackupEnabled:false,autoBackupSnapshots:false,lastAutoBackupAt:0,lastAutoBackupErrorAt:0,lastSnapshotBackupAt:0,changeCountSinceAutoBackup:0,alwaysOnTop:false,windowOpacity:1,weeklyPinnedNoteId:null,minimizeToTray:false,miniMode:false,workMode:'default',workspace:'personal',customTemplates:null,editorWide:false};
 let filter={q:'',tag:null,color:null,smart:'all',folder:null,due:null,zone:null,kind:null};
-let calCur=(()=>{const d=new Date();d.setDate(1);return d;})();
+let calCur=new Date();
 let editing=null, edOpenSnap=null, edHistSnap=null, edSaveTimer=null, editConflict=null, editConflictToastAt=0;
 const localNoteWriteStamp=new Map();
 let mbChannel=null, externalReloading=false, saveErrorToastAt=0, externalNoticeToastAt=0;
@@ -215,6 +215,20 @@ const StoreService=(()=>{
     });
     return removed;
   }
+
+  function exportZones(){return zones().map(z=>({id:z.id,name:z.name,collapsed:!!z.collapsed,order:z.order}));}
+  function comparableZones(list){return normalizeZones(list).map(z=>({id:z.id,name:z.name,collapsed:!!z.collapsed,order:z.order}));}
+  function applySharedZones(list){
+    if(!Array.isArray(list)||!list.length)return false;
+    let changed=false;
+    const next=comparableZones(list);
+    update(st=>{
+      const cur=comparableZones(st.zones);
+      changed=JSON.stringify(cur)!==JSON.stringify(next);
+      if(changed)st.zones=next;
+    });
+    return changed;
+  }
   function sidebarOrder(){return normalize().uiState.sidebarOrder.slice();}
   function setSidebarOrder(order){return update(st=>{st.uiState.sidebarOrder=normalizeSidebarOrderList(order);});}
   function setSidebarCollapsed(key,value){return update(st=>{st.uiState.sidebarCollapsed[String(key||'')]=!!value;});}
@@ -245,7 +259,7 @@ const StoreService=(()=>{
   function desktop(){return Object.assign({},normalize().desktop);}
   function setDesktopPatch(patch){return update(st=>{Object.assign(st.desktop,patch||{});});}
   function persistable(){normalize();return {schemaVersion:schema,store:JSON.parse(JSON.stringify(meta.store))};}
-  return {schema,normalize,persistable,update,zones,zoneNames,zoneCount,collapsedZones,setZoneName,setZoneCollapsed,toggleZoneCollapsed,addZone,removeZone,
+  return {schema,normalize,persistable,update,zones,zoneNames,zoneCount,collapsedZones,setZoneName,setZoneCollapsed,toggleZoneCollapsed,addZone,removeZone,exportZones,applySharedZones,
     sidebarOrder,setSidebarOrder,setSidebarCollapsed,toggleSidebarCollapsed,theme,setTheme,toggleTheme,view,setView,calMode,setCalMode,
     defaultSize,setDefaultSize,workMode,setWorkMode:setWorkModeValue,editorWide,setEditorWide,toggleEditorWide,workspace,setWorkspace,
     weeklyPinnedNoteId,setWeeklyPinnedNoteId,templates,setTemplates,backup,setBackupPatch,recordDataWrite,desktop,setDesktopPatch};
@@ -302,6 +316,18 @@ async function reloadExternalChange(){
     updateStorageInfo();
   }finally{externalReloading=false;}
 }
+
+function uiDraftRenderActive(){
+  const ae=document.activeElement;
+  if(ae&&ae.closest&&ae.closest('.dquick,.quickcomposer.open'))return true;
+  if(window.MBCalendarDraft&&MBCalendarDraft.isActive&&MBCalendarDraft.isActive())return true;
+  const qc=document.querySelector('.quickcomposer.open');
+  if(qc){
+    const t=qc.querySelector('#qcTitle'), b=qc.querySelector('#qcBody');
+    if((t&&t.value.trim())||(b&&b.value.trim()))return true;
+  }
+  return false;
+}
 function setupMultiTabSync(){
   if('BroadcastChannel' in window){
     mbChannel=new BroadcastChannel('memoboard');
@@ -309,6 +335,7 @@ function setupMultiTabSync(){
       const msg=e.data||{};
       if(msg.app!=='memoboard'||msg.tabId===TAB_ID)return;
       if(editing&&SyncService.noticeExternal(msg))return;
+      if(uiDraftRenderActive()){toast('입력 중인 내용이 있어 외부 변경 반영을 잠시 보류했습니다');return;}
       reloadExternalChange().then(()=>toast('다른 탭 변경사항을 반영했습니다'));
     };
   }
@@ -316,6 +343,7 @@ function setupMultiTabSync(){
     if(e.key!=='mb-notes'&&e.key!=='mb-meta')return;
     const kind=e.key==='mb-meta'?'meta':'notes';
     if(editing){SyncService.noticeExternal({kind,entityId:null,at:Date.now()});return;}
+    if(uiDraftRenderActive())return;
     reloadExternalChange();
   });
 }

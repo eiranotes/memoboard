@@ -5,9 +5,6 @@
 
 > 현재 패키지는 Windows/Tauri 데스크톱 실행을 기준으로 구성되어 있습니다.
 
-- Latest release: https://github.com/eiranotes/memoboard/releases/latest
-
-
 
 ## 스크린샷
 
@@ -33,12 +30,13 @@
 - **검색과 태그**: 제목, 본문, 태그 기준으로 메모를 빠르게 찾을 수 있습니다.
 - **휴지통**: 삭제한 메모를 바로 제거하지 않고 휴지통에서 확인할 수 있습니다.
 - **개인/공유 작업함**: 개인 메모는 로컬 IndexedDB에 저장하고, 공유 작업함은 지정한 공유 폴더의 JSON 파일을 사용합니다.
+- **공유 편집 보호**: 공유 작업함에서는 편집 잠금이 잡힌 메모만 열고, 입력 중에는 자동 동기화로 현재 편집 내용을 덮어쓰지 않습니다. 공유 메모는 저장/완료 버튼을 누를 때 공유폴더에 반영됩니다.
 - **로컬 우선 구조**: 서버 없이 로컬 데이터 중심으로 동작합니다.
 - **Tauri 기반 데스크톱 앱**: WebView2 + Rust/Tauri로 Electron보다 가벼운 데스크톱 실행을 목표로 합니다.
 
 ## 화면 구조
 
-현재 공개 버전은 **v1.0.0**이며, 라이선스는 **MIT License**입니다.
+현재 공개 버전은 **v1.0.1**이며, 라이선스는 **MIT License**입니다.
 
 Memoboard는 크게 네 영역으로 구성됩니다.
 
@@ -123,12 +121,12 @@ Windows 11에는 WebView2 Runtime이 기본 설치되어 있는 경우가 많습
 생성되는 파일명:
 
 ```text
-dist/Memoboard-Tauri-1.0.0.exe
+dist/Memoboard-Tauri-1.0.1.exe
 ```
 
 즉, 처음 받았을 때 루트 폴더에 실행파일이 없어도 정상입니다. 실행파일은 `build-tauri.bat`를 실행한 뒤 `dist/` 폴더에 만들어집니다.
 
-GitHub Releases를 사용할 경우에는 로컬에서 생성한 `dist/Memoboard-Tauri-1.0.0.exe`를 `v1.0.0` 릴리즈에 첨부하면 됩니다. 저장소 본문에는 소스코드를 두고, 실제 배포용 실행파일은 Releases에 올리는 방식을 권장합니다.
+GitHub Releases를 사용할 경우에는 로컬에서 생성한 `dist/Memoboard-Tauri-1.0.1.exe`를 `v1.0.1` 릴리즈에 첨부하면 됩니다. 저장소 본문에는 소스코드를 두고, 실제 배포용 실행파일은 Releases에 올리는 방식을 권장합니다.
 
 ## 개발 실행
 
@@ -172,7 +170,7 @@ build-tauri.bat
 빌드가 성공하면 아래 위치에 실행파일이 생성됩니다.
 
 ```text
-dist/Memoboard-Tauri-1.0.0.exe
+dist/Memoboard-Tauri-1.0.1.exe
 ```
 
 이미 `node_modules`가 있고 의존성 설치를 건너뛰고 싶다면:
@@ -183,6 +181,27 @@ build-tauri-no-install.bat
 
 `build-tauri-no-install.bat`도 빌드 성공 시 같은 위치에 실행파일을 복사합니다.
 
+
+## 빌드 오류 메모
+
+Tauri 2의 기본 feature에는 asset `compression`이 포함됩니다. 이 기능은 Rust `brotli` crate를 끌고 오는데, 일부 fresh Windows 빌드에서 `brotli 8.0.3`과 `alloc-no-stdlib` 2.x/3.x가 함께 잡히며 `StandardAlloc: Allocator<u8>` 오류가 날 수 있습니다.
+
+이 프로젝트는 앱 자산이 작고 별도 압축 이점이 크지 않으므로, `src-tauri/Cargo.toml`에서 Tauri 기본 feature를 끄고 필요한 기능만 명시했습니다. 핵심은 `compression`을 사용하지 않는 것입니다.
+
+```toml
+tauri-build = { version = "2", default-features = false }
+tauri = { version = "2", default-features = false, features = ["wry", "custom-protocol", "tray-icon", "image-png", "image-ico", "common-controls-v6", "dynamic-acl"] }
+```
+
+기존 실패 폴더에서 계속 빌드하는 경우에는 캐시를 정리하세요.
+
+```powershell
+Remove-Item -Recurse -Force .\src-tauri\target -ErrorAction SilentlyContinue
+Remove-Item .\src-tauri\Cargo.lock -Force -ErrorAction SilentlyContinue
+npm run build
+```
+
+정상 상태라면 새 빌드 로그에 `Compiling brotli v8.0.3`가 나오지 않아야 합니다.
 
 ## 데이터 저장 방식
 
@@ -205,6 +224,8 @@ build-tauri-no-install.bat
 ```
 
 네트워크 드라이브, 동기화 폴더, NAS 폴더 등을 지정하면 여러 사용자가 같은 공유 보드를 볼 수 있습니다. 동시 편집 충돌을 줄이기 위해 lock 파일과 `updatedAt` 비교를 사용합니다.
+
+설정 탭의 **공유 작업함** 카드에서 공유폴더 용량, 활성 잠금, 손상 JSON 개수, 매니페스트 구역 개수를 점검할 수 있습니다. 같은 공유폴더를 선택한 사용자는 `manifest.json`의 구역 설정을 적용받습니다. 구역 이름/개수/순서를 팀 기준으로 고정하려면 설정 탭에서 **현재 구역을 매니페스트에 저장**을 누릅니다.
 
 ## Markdown 지원
 
@@ -253,3 +274,9 @@ _기울임_
 ## 라이선스
 
 MIT License입니다. 자세한 내용은 루트의 `LICENSE` 파일을 확인하세요.
+
+### Window movement
+
+Memoboard uses a frameless Tauri window. Drag the top bar background, the logo area, or the empty space near the right side of the header to move the window. Buttons, tabs, the search box, and window controls remain interactive and are excluded from the drag region. Double-clicking a draggable header area toggles maximize/restore.
+
+Implementation note: window dragging uses a custom Tauri command (`window_start_drag`) instead of mixing `data-tauri-drag-region` and legacy `-webkit-app-region` CSS. This avoids duplicate drag paths and keeps header controls clickable.
